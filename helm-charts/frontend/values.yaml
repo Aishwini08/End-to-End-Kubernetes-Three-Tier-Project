@@ -1,13 +1,10 @@
+
 replicaCount: 1
 
 image:
   repository: aishwini08/frontend
   pullPolicy: Always
-<<<<<<< HEAD
   tag: "frontend-fix-1"
-=======
-  tag: "frontend-fix-1"
->>>>>>> e94b66ee74ef47f57c1e2f8896043684d7e90af5
 
 imagePullSecrets: []
 nameOverride: ""
@@ -61,3 +58,4 @@ affinity: {}
 
 httpRoute:
   enabled: false
+
