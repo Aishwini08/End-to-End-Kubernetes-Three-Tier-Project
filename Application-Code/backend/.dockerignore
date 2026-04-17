@@ -12,6 +12,7 @@ pids
 # Directory used by npm
 node_modules
 npm-debug.log
+.git
 
 # Directory used by yarn
 yarn-error.log

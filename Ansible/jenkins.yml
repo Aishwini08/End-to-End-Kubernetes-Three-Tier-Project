@@ -1,0 +1,89 @@
+---
+- name: Configure Jenkins Server
+  hosts: jenkins
+  become: true
+
+  tasks:
+    - name: Remove stale Jenkins repo if present
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/jenkins.list
+        - /etc/apt/keyrings/jenkins-keyring.asc
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - gnupg
+          - wget
+          - fontconfig
+          - openjdk-21-jre
+          - docker.io
+        state: present
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Jenkins GPG key
+      shell: |
+        wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+          https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+
+    - name: Add Jenkins repository
+      shell: |
+        echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" | tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+    - name: Update apt cache after Jenkins repo
+      apt:
+        update_cache: yes
+
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Start and enable Jenkins
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Add jenkins user to docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
+    - name: Install kubectl
+      shell: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      args:
+        creates: /usr/local/bin/kubectl
+
+    - name: Install Helm
+      shell: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm

@@ -1,0 +1,16 @@
+image:
+  repository: mongo
+  tag: "5"
+  pullPolicy: IfNotPresent
+
+service:
+  port: 27017
+
+storage:
+  size: 1Gi
+  storageClassName: gp2-immediate
+
+auth:
+  username: admin
+  password: password123
+  database: tasksdb
