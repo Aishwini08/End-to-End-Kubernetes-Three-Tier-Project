@@ -27,6 +27,9 @@ serviceAccount:
 ingress:
   enabled: false
 
+httpRoute:
+  enabled: false
+
 autoscaling:
   enabled: false
   minReplicas: 1
