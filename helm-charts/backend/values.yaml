@@ -4,7 +4,7 @@ replicaCount: 1
 image:
   repository: aishwini08/backend
   pullPolicy: Always
-  tag: 111
+  tag: backend-metrics-1
 
 imagePullSecrets: []
 nameOverride: ""
@@ -24,6 +24,14 @@ securityContext: {}
 service:
   type: ClusterIP
   port: 5000
+
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels:
+    release: monitoring
 
 env:
   - name: MONGO_CONN_STR
