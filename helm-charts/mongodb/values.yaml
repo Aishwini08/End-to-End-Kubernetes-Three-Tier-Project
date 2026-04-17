@@ -14,3 +14,7 @@ auth:
   username: admin
   password: password123
   database: tasksdb
+
+serviceAccount:
+  create: false
+  automount: false
