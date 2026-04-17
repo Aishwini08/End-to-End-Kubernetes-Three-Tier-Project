@@ -15,6 +15,11 @@ auth:
   password: password123
   database: tasksdb
 
+nameOverride: ""
+fullnameOverride: ""
+
 serviceAccount:
   create: false
   automount: false
+  annotations: {}
+  name: ""
