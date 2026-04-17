@@ -3,7 +3,15 @@ replicaCount: 1
 image:
   repository: aishwini08/backend
   pullPolicy: Always
-  tag: "latest"
+<<<<<<< HEAD
+<<<<<<< HEAD
+  tag: 111
+=======
+  tag: 111
+>>>>>>> 9ac65c42e37451c996f36825ce8fcc20e3db8f32
+=======
+  tag: 111
+>>>>>>> bd4abdc57df587f96cd06712cb05955bbb4e104f
 
 imagePullSecrets: []
 nameOverride: ""
@@ -21,7 +29,7 @@ podSecurityContext: {}
 securityContext: {}
 
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 5000
 
 env:
@@ -61,17 +69,15 @@ livenessProbe:
   httpGet:
     path: /healthz
     port: 5000
-  initialDelaySeconds: 30
+  initialDelaySeconds: 10
   periodSeconds: 10
-  failureThreshold: 5
 
 readinessProbe:
   httpGet:
     path: /ready
     port: 5000
-  initialDelaySeconds: 30
+  initialDelaySeconds: 10
   periodSeconds: 10
-  failureThreshold: 5
 
 autoscaling:
   enabled: false
