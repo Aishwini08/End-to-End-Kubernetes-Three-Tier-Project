@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: aishwini08/frontend
   pullPolicy: Always
-  tag: 84
+  tag: 85
 
 imagePullSecrets: []
 nameOverride: ""
