@@ -4,10 +4,14 @@ image:
   repository: aishwini08/backend
   pullPolicy: Always
 <<<<<<< HEAD
+<<<<<<< HEAD
   tag: "latest"
 =======
   tag: 59
 >>>>>>> 9ac65c42e37451c996f36825ce8fcc20e3db8f32
+=======
+  tag: 61
+>>>>>>> bd4abdc57df587f96cd06712cb05955bbb4e104f
 
 imagePullSecrets: []
 nameOverride: ""
