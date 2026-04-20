@@ -27,7 +27,7 @@ service:
 
 env:
   - name: MONGO_CONN_STR
-    value: "mongodb://admin:password123@mongodb-service:27017/tasksdb?authSource=admin"
+    value: "mongodb://admin:password123@mongodb-service.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin"
   - name: PORT
     value: "5000"
 
