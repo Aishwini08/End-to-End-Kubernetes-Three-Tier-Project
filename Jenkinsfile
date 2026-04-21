@@ -2,10 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION        = 'ap-south-1'
-        ECR_FRONTEND_URL  = "${AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/frontend"
-        ECR_BACKEND_URL   = "${AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/backend"
-        GITHUB_REPO       = 'https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git'
+        AWS_REGION   = 'ap-south-1'
+        GITHUB_REPO  = 'https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git'
     }
 
     stages {
@@ -18,12 +16,11 @@ pipeline {
         stage('Get AWS Account ID') {
             steps {
                 script {
-                    env.AWS_ACCOUNT_ID = sh(
-                        script: 'aws sts get-caller-identity --query Account --output text',
-                        returnStdout: true
-                    ).trim()
+                    env.AWS_ACCOUNT_ID   = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
                     env.ECR_FRONTEND_URL = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/frontend"
                     env.ECR_BACKEND_URL  = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/backend"
+                    echo "ECR Frontend: ${env.ECR_FRONTEND_URL}"
+                    echo "ECR Backend:  ${env.ECR_BACKEND_URL}"
                 }
             }
         }
@@ -31,9 +28,7 @@ pipeline {
         stage('ECR Login') {
             steps {
                 sh '''
-                    aws ecr get-login-password --region ap-south-1 | \
-                    docker login --username AWS --password-stdin \
-                    $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
+                    aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
                 '''
             }
         }
@@ -58,14 +53,12 @@ pipeline {
 
         stage('Update Helm Chart Tags') {
             steps {
-                script {
-                    sh """
-                        sed -i "s|repository: .*frontend.*|repository: ${ECR_FRONTEND_URL}|g" helm-charts/frontend/values.yaml
-                        sed -i "s|repository: .*backend.*|repository: ${ECR_BACKEND_URL}|g" helm-charts/backend/values.yaml
-                        sed -i "s|tag: .*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/frontend/values.yaml
-                        sed -i "s|tag: .*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/backend/values.yaml
-                    """
-                }
+                sh """
+                    sed -i "s|repository:.*|repository: ${env.ECR_FRONTEND_URL}|g" helm-charts/frontend/values.yaml
+                    sed -i "s|repository:.*|repository: ${env.ECR_BACKEND_URL}|g" helm-charts/backend/values.yaml
+                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/frontend/values.yaml
+                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/backend/values.yaml
+                """
             }
         }
 
