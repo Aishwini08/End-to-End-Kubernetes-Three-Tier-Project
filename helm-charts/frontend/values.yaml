@@ -2,9 +2,9 @@
 replicaCount: 1
 
 image:
-  repository: aishwini08/frontend
+  repository: 266798532280.dkr.ecr.ap-south-1.amazonaws.com/frontend
   pullPolicy: Always
-  tag: 23
+  tag: "77"
 
 imagePullSecrets: []
 nameOverride: ""
