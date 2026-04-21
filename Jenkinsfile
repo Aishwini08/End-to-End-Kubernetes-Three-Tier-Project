@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_CREDENTIALS = credentials('dockerhub-credentials')
-        DOCKER_HUB_USERNAME = 'aishwini08'
-        GITHUB_REPO = 'https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git'
+        AWS_REGION        = 'ap-south-1'
+        ECR_FRONTEND_URL  = "${AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/frontend"
+        ECR_BACKEND_URL   = "${AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/backend"
+        GITHUB_REPO       = 'https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git'
     }
 
     stages {
@@ -14,14 +15,34 @@ pipeline {
             }
         }
 
+        stage('Get AWS Account ID') {
+            steps {
+                script {
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: 'aws sts get-caller-identity --query Account --output text',
+                        returnStdout: true
+                    ).trim()
+                    env.ECR_FRONTEND_URL = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/frontend"
+                    env.ECR_BACKEND_URL  = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-south-1.amazonaws.com/backend"
+                }
+            }
+        }
+
+        stage('ECR Login') {
+            steps {
+                sh '''
+                    aws ecr get-login-password --region ap-south-1 | \
+                    docker login --username AWS --password-stdin \
+                    $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
+                '''
+            }
+        }
+
         stage('Build & Push Frontend') {
             steps {
                 sh '''
-                    echo $DOCKER_HUB_CREDENTIALS_PSW | docker login -u $DOCKER_HUB_CREDENTIALS_USR --password-stdin
-                    docker build -t ${DOCKER_HUB_USERNAME}/frontend:${BUILD_NUMBER} Application-Code/frontend/
-                    docker push ${DOCKER_HUB_USERNAME}/frontend:${BUILD_NUMBER}
-                    docker tag ${DOCKER_HUB_USERNAME}/frontend:${BUILD_NUMBER} ${DOCKER_HUB_USERNAME}/frontend:latest
-                    docker push ${DOCKER_HUB_USERNAME}/frontend:latest
+                    docker build -t ${ECR_FRONTEND_URL}:${BUILD_NUMBER} Application-Code/frontend/
+                    docker push ${ECR_FRONTEND_URL}:${BUILD_NUMBER}
                 '''
             }
         }
@@ -29,21 +50,22 @@ pipeline {
         stage('Build & Push Backend') {
             steps {
                 sh '''
-                    echo $DOCKER_HUB_CREDENTIALS_PSW | docker login -u $DOCKER_HUB_CREDENTIALS_USR --password-stdin
-                    docker build -t ${DOCKER_HUB_USERNAME}/backend:${BUILD_NUMBER} Application-Code/backend/
-                    docker push ${DOCKER_HUB_USERNAME}/backend:${BUILD_NUMBER}
-                    docker tag ${DOCKER_HUB_USERNAME}/backend:${BUILD_NUMBER} ${DOCKER_HUB_USERNAME}/backend:latest
-                    docker push ${DOCKER_HUB_USERNAME}/backend:latest
+                    docker build -t ${ECR_BACKEND_URL}:${BUILD_NUMBER} Application-Code/backend/
+                    docker push ${ECR_BACKEND_URL}:${BUILD_NUMBER}
                 '''
             }
         }
 
         stage('Update Helm Chart Tags') {
             steps {
-                sh '''
-                    sed -i "s|tag: .*|tag: \"${BUILD_NUMBER}\"|g" helm-charts/frontend/values.yaml
-                    sed -i "s|tag: .*|tag: \"${BUILD_NUMBER}\"|g" helm-charts/backend/values.yaml
-                '''
+                script {
+                    sh """
+                        sed -i "s|repository: .*frontend.*|repository: ${ECR_FRONTEND_URL}|g" helm-charts/frontend/values.yaml
+                        sed -i "s|repository: .*backend.*|repository: ${ECR_BACKEND_URL}|g" helm-charts/backend/values.yaml
+                        sed -i "s|tag: .*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/frontend/values.yaml
+                        sed -i "s|tag: .*|tag: \\"${BUILD_NUMBER}\\"|g" helm-charts/backend/values.yaml
+                    """
+                }
             }
         }
 

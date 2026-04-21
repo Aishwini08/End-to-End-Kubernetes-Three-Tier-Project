@@ -10,7 +10,6 @@ output "jenkins_url" {
   value = module.jenkins.jenkins_url
 }
 
-# ── ArgoCD outputs ─────────────────────────────────────────────
 data "kubernetes_service" "argocd_server" {
   metadata {
     name      = "argocd-server"
@@ -28,7 +27,7 @@ data "kubernetes_secret" "argocd_admin_password" {
 }
 
 output "argocd_url" {
-  value       = "http://${data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname}"
+  value       = try("http://${data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname}", "")
   description = "ArgoCD UI URL"
 }
 
@@ -36,4 +35,13 @@ output "argocd_admin_password" {
   value       = data.kubernetes_secret.argocd_admin_password.data["password"]
   sensitive   = true
   description = "ArgoCD initial admin password"
+}
+
+
+output "ecr_frontend_url" {
+  value = aws_ecr_repository.frontend.repository_url
+}
+
+output "ecr_backend_url" {
+  value = aws_ecr_repository.backend.repository_url
 }

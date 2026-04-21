@@ -47,6 +47,7 @@ resource "aws_instance" "jenkins" {
   vpc_security_group_ids      = [aws_security_group.jenkins.id]
   associate_public_ip_address = true
   key_name                    = aws_key_pair.jenkins.key_name
+  iam_instance_profile        = var.iam_instance_profile  # ← add this
 
   tags = {
     Name = "jenkins-server"

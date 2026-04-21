@@ -1,8 +1,7 @@
-
 module "vpc" {
-  source = "./modules/vpc"
-   vpc_cidr = var.vpc_cidr
-   region   = var.region
+  source   = "./modules/vpc"
+  vpc_cidr = var.vpc_cidr
+  region   = var.region
 }
 
 module "eks" {
@@ -24,11 +23,11 @@ module "addons" {
 module "jenkins" {
   source = "./modules/jenkins"
 
-  vpc_id           = module.vpc.vpc_id
-  public_subnet_id = module.vpc.public_subnets[0]
+  vpc_id               = module.vpc.vpc_id
+  public_subnet_id     = module.vpc.public_subnets[0]
+  iam_instance_profile = aws_iam_instance_profile.jenkins.name
 }
 
-# ── ArgoCD Installation via Helm ──────────────────────────────
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
@@ -44,7 +43,6 @@ resource "helm_release" "argocd" {
   depends_on = [module.eks]
 }
 
-# ── GitHub credentials for ArgoCD to pull your Helm charts ────
 resource "kubernetes_secret" "github_creds" {
   metadata {
     name      = "github-creds"
@@ -63,9 +61,6 @@ resource "kubernetes_secret" "github_creds" {
 
   depends_on = [helm_release.argocd]
 }
-
-
-
 
 resource "kubernetes_manifest" "argocd_app_frontend" {
   manifest = {
@@ -155,4 +150,50 @@ resource "kubernetes_manifest" "argocd_app_mongodb" {
     }
   }
   depends_on = [helm_release.argocd, kubernetes_secret.github_creds]
+}
+
+
+# ── ECR Repositories ──────────────────────────────────────────
+resource "aws_ecr_repository" "frontend" {
+  name                 = "frontend"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_repository" "backend" {
+  name                 = "backend"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+# ── IAM role for Jenkins EC2 to access ECR ────────────────────
+resource "aws_iam_role" "jenkins_ecr_role" {
+  name = "jenkins-ecr-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "jenkins_ecr" {
+  role       = aws_iam_role.jenkins_ecr_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+resource "aws_iam_instance_profile" "jenkins" {
+  name = "jenkins-ecr-profile"
+  role = aws_iam_role.jenkins_ecr_role.name
 }

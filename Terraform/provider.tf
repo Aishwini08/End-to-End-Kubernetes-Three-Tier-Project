@@ -27,7 +27,6 @@ terraform {
   }
 }
 
-# ── Use data sources instead of module outputs directly ────────
 data "aws_eks_cluster" "cluster" {
   name = module.eks.cluster_name
 }

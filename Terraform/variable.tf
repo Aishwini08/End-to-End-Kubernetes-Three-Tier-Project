@@ -21,13 +21,13 @@ variable "vpc_cidr" {
 variable "github_repo_url" {
   description = "GitHub repository URL for ArgoCD to pull Helm charts"
   type        = string
-  default     = ""
+  default     = "https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git"
 }
 
 variable "github_username" {
   description = "GitHub username for ArgoCD repository access"
   type        = string
-  default     = ""
+  default     = "Aishwini08"
 }
 
 variable "github_token" {
