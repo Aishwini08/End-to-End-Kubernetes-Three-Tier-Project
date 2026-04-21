@@ -51,6 +51,26 @@ pipeline {
             }
         }
 
+        stage('Trivy Scan Frontend') {
+            steps {
+                sh '''
+                    trivy image --severity HIGH,CRITICAL \
+                    --no-progress \
+                    ${ECR_FRONTEND_URL}:${BUILD_NUMBER} || true
+                '''
+            }
+        }
+
+        stage('Trivy Scan Backend') {
+            steps {
+                sh '''
+                    trivy image --severity HIGH,CRITICAL \
+                    --no-progress \
+                    ${ECR_BACKEND_URL}:${BUILD_NUMBER} || true
+                '''
+            }
+        }
+
         stage('Update Helm Chart Tags') {
             steps {
                 sh """
