@@ -84,6 +84,7 @@ pipeline {
         stage('Build & Push Frontend') {
             steps {
                 sh '''
+                    docker system prune -af || true
                     docker build -t ${ECR_FRONTEND_URL}:${BUILD_NUMBER} Application-Code/frontend/
                     docker push ${ECR_FRONTEND_URL}:${BUILD_NUMBER}
                 '''

@@ -49,12 +49,17 @@ resource "aws_security_group" "jenkins" {
 
 resource "aws_instance" "jenkins" {
   ami                         = "ami-0f58b397bc5c1f2e8"
-  instance_type               = "t3.medium"
+  instance_type               = "t3.large"
   subnet_id                   = var.public_subnet_id
   vpc_security_group_ids      = [aws_security_group.jenkins.id]
   associate_public_ip_address = true
   key_name                    = aws_key_pair.jenkins.key_name
-  iam_instance_profile        = var.iam_instance_profile  # ← add this
+  iam_instance_profile        = var.iam_instance_profile  
+
+  root_block_device {
+    volume_size = 30    # 30GB instead of default 8GB
+    volume_type = "gp3"
+  }
 
   tags = {
     Name = "jenkins-server"
