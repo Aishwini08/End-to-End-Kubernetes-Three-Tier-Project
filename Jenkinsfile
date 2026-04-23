@@ -7,9 +7,57 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 git branch: 'main', credentialsId: 'github-credentials', url: "${GITHUB_REPO}"
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                sh '''
+                    mkdir -p reports
+                    dependency-check \
+                        --project "three-tier-app" \
+                        --scan Application-Code/ \
+                        --format HTML \
+                        --out reports/ \
+                        --disableYarnAudit \
+                        --disableNodeAudit \
+                        || true
+                '''
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'reports',
+                        reportFiles: 'dependency-check-report.html',
+                        reportName: 'OWASP Dependency Check Report'
+                    ])
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        JENKINS_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+                        docker run --rm \
+                            --network host \
+                            -e SONAR_HOST_URL="http://${JENKINS_IP}:9000" \
+                            -e SONAR_TOKEN="${SONAR_TOKEN}" \
+                            -v "${WORKSPACE}/Application-Code:/usr/src" \
+                            sonarsource/sonar-scanner-cli \
+                            -Dsonar.projectKey=three-tier-app \
+                            -Dsonar.sources=/usr/src \
+                            || true
+                    '''
+                }
             }
         }
 
@@ -51,22 +99,11 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan Frontend') {
+        stage('Trivy Image Scan') {
             steps {
                 sh '''
-                    trivy image --severity HIGH,CRITICAL \
-                    --no-progress \
-                    ${ECR_FRONTEND_URL}:${BUILD_NUMBER} || true
-                '''
-            }
-        }
-
-        stage('Trivy Scan Backend') {
-            steps {
-                sh '''
-                    trivy image --severity HIGH,CRITICAL \
-                    --no-progress \
-                    ${ECR_BACKEND_URL}:${BUILD_NUMBER} || true
+                    trivy image --severity HIGH,CRITICAL --no-progress ${ECR_FRONTEND_URL}:${BUILD_NUMBER} || true
+                    trivy image --severity HIGH,CRITICAL --no-progress ${ECR_BACKEND_URL}:${BUILD_NUMBER} || true
                 '''
             }
         }
@@ -87,9 +124,9 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
                     sh '''
                         git config user.email "jenkins@ci.com"
-                        git config user.name "Jenkins"
+                        git config user.name "Jenkins CI"
                         git add helm-charts/frontend/values.yaml helm-charts/backend/values.yaml
-                        git commit -m "Update image tags to ${BUILD_NUMBER}"
+                        git diff --staged --quiet || git commit -m "CI: update image tags to ${BUILD_NUMBER} [skip ci]"
                         git push https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main
                     '''
                 }

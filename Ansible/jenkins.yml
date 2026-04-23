@@ -76,6 +76,11 @@
         groups: docker
         append: yes
 
+    - name: Install unzip
+      apt:
+        name: unzip
+        state: present
+
     - name: Install kubectl
       shell: |
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -102,3 +107,47 @@
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
       args:
         creates: /usr/local/bin/trivy
+
+    - name: Install unzip
+      apt:
+        name: unzip
+        state: present
+
+    - name: Install AWS CLI
+      shell: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+        unzip /tmp/awscliv2.zip -d /tmp/
+        /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Install Trivy
+      shell: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      args:
+        creates: /usr/local/bin/trivy
+
+    - name: Install OWASP Dependency Check
+      shell: |
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip -O /tmp/dc.zip
+        unzip /tmp/dc.zip -d /opt/
+        chmod +x /opt/dependency-check/bin/dependency-check.sh
+        ln -sf /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+      args:
+        creates: /usr/local/bin/dependency-check
+
+    - name: Run SonarQube container
+      shell: |
+        docker run -d \
+          --name sonarqube \
+          --restart always \
+          -p 9000:9000 \
+          -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+          sonarqube:lts-community
+      args:
+        creates: /var/sonarqube-installed
+
+    - name: Mark SonarQube as installed
+      file:
+        path: /var/sonarqube-installed
+        state: touch
