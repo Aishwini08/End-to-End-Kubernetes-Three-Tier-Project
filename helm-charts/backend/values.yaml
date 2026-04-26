@@ -56,7 +56,13 @@ httpRoute:
         type: PathPrefix
         value: /headers
 
-resources: {}
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 
 livenessProbe:
   httpGet:
