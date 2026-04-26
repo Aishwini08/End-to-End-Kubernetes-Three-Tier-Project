@@ -3,7 +3,7 @@ image:
   repository: 266798532280.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
 <<<<<<< HEAD
-  tag: "5"
+  tag: "8"
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
