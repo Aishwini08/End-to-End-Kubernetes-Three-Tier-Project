@@ -13,7 +13,7 @@ body {
     align-items: center;
     min-height: 100vh;
     padding: 20px;
-    background: linear-gradient(135deg, #6efb7e, #5b8865);
+    background: linear-gradient(135deg, #7e6efb, #5b5c88);
 }
 
 /* Optional: Add some more global styles for typography */
@@ -37,4 +37,10 @@ code {
     border-radius: 4px;
     font-family: 'Courier New', monospace;
 }
+
+
+
+
+
+
 

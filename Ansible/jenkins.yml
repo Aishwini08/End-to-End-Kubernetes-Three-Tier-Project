@@ -25,7 +25,7 @@
           - fontconfig
           - openjdk-21-jre
           - docker.io
-          - unzip
+          - unzip        # ← unzip handled here, no need for separate task
         state: present
 
     - name: Ensure /etc/apt/keyrings directory exists
@@ -76,11 +76,6 @@
         groups: docker
         append: yes
 
-    - name: Install unzip
-      apt:
-        name: unzip
-        state: present
-
     - name: Install kubectl
       shell: |
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -94,7 +89,7 @@
       args:
         creates: /usr/local/bin/helm
 
-    - name: Install AWS CLI
+    - name: Install AWS CLI       
       shell: |
         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
         unzip /tmp/awscliv2.zip -d /tmp/
@@ -102,26 +97,7 @@
       args:
         creates: /usr/local/bin/aws
 
-    - name: Install Trivy
-      shell: |
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-      args:
-        creates: /usr/local/bin/trivy
-
-    - name: Install unzip
-      apt:
-        name: unzip
-        state: present
-
-    - name: Install AWS CLI
-      shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
-        unzip /tmp/awscliv2.zip -d /tmp/
-        /tmp/aws/install
-      args:
-        creates: /usr/local/bin/aws
-
-    - name: Install Trivy
+    - name: Install Trivy        
       shell: |
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
       args:
