@@ -5,9 +5,9 @@ image:
   repository: 266798532280.dkr.ecr.ap-south-1.amazonaws.com/frontend
   pullPolicy: Always
 <<<<<<< HEAD
-  tag: "1"
+  tag: "2"
 =======
-  tag: "1"
+  tag: "2"
 >>>>>>> 16c658eb3b42b2ed6693ffdb6619ae1211c23bba
 
 imagePullSecrets: []
