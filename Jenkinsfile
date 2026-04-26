@@ -14,6 +14,22 @@ pipeline {
             }
         }
 
+        stage('Skip CI Check') {
+            steps {
+                script {
+                    def commitMsg = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+                    def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
+                    
+                    if (commitMsg.contains('[skip ci]') || 
+                        commitMsg.contains('[ci skip]') || 
+                        commitAuthor == 'Jenkins CI') {
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping CI - commit was made by Jenkins automation')
+                    }
+                }
+            }
+        }
+
         stage('OWASP Dependency Check') {
             steps {
                 sh '''
@@ -76,7 +92,9 @@ pipeline {
         stage('ECR Login') {
             steps {
                 sh '''
-                    aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
+                    aws ecr get-login-password --region ap-south-1 \
+                        | docker login --username AWS --password-stdin \
+                        $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
                 '''
             }
         }
@@ -126,13 +144,15 @@ pipeline {
                     sh '''
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins CI"
+                        git pull https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main || true
                         git add helm-charts/frontend/values.yaml helm-charts/backend/values.yaml
-                        git diff --staged --quiet || git commit -m "CI: update image tags to ${BUILD_NUMBER} [skip ci]"
+                        git diff --staged --quiet || git commit -m "CI: update image tags to ${BUILD_NUMBER} [skip ci] [ci skip]"
                         git push https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main
                     '''
                 }
             }
         }
+
     }
 
     post {
@@ -141,6 +161,9 @@ pipeline {
         }
         failure {
             echo 'Pipeline failed!'
+        }
+        aborted {
+            echo 'Pipeline skipped - triggered by Jenkins CI commit.'
         }
     }
 }
