@@ -1,40 +1,28 @@
-
 replicaCount: 1
-
 image:
   repository: 266798532280.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
-<<<<<<< HEAD
   tag: "5"
-=======
-  tag: "5"
->>>>>>> 16c658eb3b42b2ed6693ffdb6619ae1211c23bba
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
-
 serviceAccount:
   create: true
   automount: true
   annotations: {}
   name: ""
-
 podAnnotations: {}
 podLabels: {}
 podSecurityContext: {}
 securityContext: {}
-
 service:
   type: ClusterIP
   port: 5000
-
 env:
   - name: MONGO_CONN_STR
     value: "mongodb://admin:password123@mongodb-service.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin"
   - name: PORT
     value: "5000"
-
 ingress:
   enabled: false
   className: ""
@@ -45,7 +33,6 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-
 httpRoute:
   enabled: false
   annotations: {}
@@ -59,7 +46,6 @@ httpRoute:
     - path:
         type: PathPrefix
         value: /headers
-
 resources:
   requests:
     cpu: 100m
@@ -67,27 +53,23 @@ resources:
   limits:
     cpu: 300m
     memory: 256Mi
-
 livenessProbe:
   httpGet:
     path: /healthz
     port: 5000
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /ready
     port: 5000
   initialDelaySeconds: 10
   periodSeconds: 10
-
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
-
 volumes: []
 volumeMounts: []
 nodeSelector: {}
