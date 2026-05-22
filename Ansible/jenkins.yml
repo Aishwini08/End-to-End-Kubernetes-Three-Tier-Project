@@ -127,3 +127,35 @@
       file:
         path: /var/sonarqube-installed
         state: touch
+
+    - name: Wait for Jenkins to be ready
+      uri:
+        url: "http://localhost:8080/login"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 20
+      delay: 15
+
+    - name: Get Jenkins initial admin password
+      slurp:
+        src: /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_password
+
+    - name: Download Jenkins CLI jar
+      get_url:
+        url: "http://localhost:8080/jnlpJars/jenkins-cli.jar"
+        dest: /tmp/jenkins-cli.jar
+
+    - name: Copy job config to server
+      copy:
+        src: jenkins-job.xml
+        dest: /tmp/jenkins-job.xml
+
+    - name: Create Jenkins pipeline job
+      shell: |
+        java -jar /tmp/jenkins-cli.jar \
+          -s http://localhost:8080 \
+          -auth admin:{{ jenkins_password.content | b64decode | trim }} \
+          create-job three-tier-pipeline < /tmp/jenkins-job.xml
+      ignore_errors: true
