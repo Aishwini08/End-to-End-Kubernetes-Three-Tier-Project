@@ -46,15 +46,15 @@ output "ecr_backend_url" {
   value = aws_ecr_repository.backend.repository_url
 }
 
-data "kubernetes_service" "grafana" {
-  metadata {
-    name      = "prometheus-grafana"
-    namespace = "monitoring"
-  }
-  depends_on = [helm_release.prometheus]
-}
+#data "kubernetes_service" "grafana" {
+  #metadata {
+    #name      = "prometheus-grafana"
+   # namespace = "monitoring"
+  #}
+ # depends_on = [helm_release.prometheus]
+#}
 
-output "grafana_url" {
-  value       = "http://${data.kubernetes_service.grafana.status[0].load_balancer[0].ingress[0].hostname}"
-  description = "Grafana dashboard URL"
-}
+#output "grafana_url" {
+  #value       = "http://${data.kubernetes_service.grafana.status[0].load_balancer[0].ingress[0].hostname}"
+ # description = "Grafana dashboard URL"
+#}

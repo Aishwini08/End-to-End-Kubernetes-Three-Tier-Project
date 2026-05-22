@@ -28,6 +28,7 @@ module "jenkins" {
   iam_instance_profile = aws_iam_instance_profile.jenkins.name
 }
 
+# ── ArgoCD Installation via Helm ──────────────────────────────
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
@@ -43,6 +44,7 @@ resource "helm_release" "argocd" {
   depends_on = [module.eks]
 }
 
+# ── GitHub credentials for ArgoCD ─────────────────────────────
 resource "kubernetes_secret" "github_creds" {
   metadata {
     name      = "github-creds"
@@ -62,6 +64,7 @@ resource "kubernetes_secret" "github_creds" {
   depends_on = [helm_release.argocd]
 }
 
+# ── ArgoCD Applications ────────────────────────────────────────
 resource "kubernetes_manifest" "argocd_app_frontend" {
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
@@ -152,12 +155,11 @@ resource "kubernetes_manifest" "argocd_app_mongodb" {
   depends_on = [helm_release.argocd, kubernetes_secret.github_creds]
 }
 
-
 # ── ECR Repositories ──────────────────────────────────────────
 resource "aws_ecr_repository" "frontend" {
   name                 = "frontend"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true   
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -167,7 +169,7 @@ resource "aws_ecr_repository" "frontend" {
 resource "aws_ecr_repository" "backend" {
   name                 = "backend"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true   
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -200,7 +202,50 @@ resource "aws_iam_instance_profile" "jenkins" {
   role = aws_iam_role.jenkins_ecr_role.name
 }
 
-# ── Prometheus + Grafana ───────────────────────────────────────
+# ── Ansible Automation ────────────────────────────────────────
+resource "null_resource" "generate_inventory" {
+  triggers = {
+    jenkins_ip = module.jenkins.jenkins_public_ip
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "[jenkins]" > ../Ansible/inventory.ini
+      echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ../Ansible/inventory.ini
+    EOT
+  }
+
+  depends_on = [module.jenkins]
+}
+
+resource "null_resource" "copy_key" {
+  triggers = {
+    jenkins_ip = module.jenkins.jenkins_public_ip
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cp ${path.module}/modules/jenkins/jenkins-key.pem ~/.ssh/jenkins-key.pem
+      chmod 400 ~/.ssh/jenkins-key.pem
+    EOT
+  }
+
+  depends_on = [null_resource.generate_inventory]
+}
+
+resource "null_resource" "run_ansible" {
+  triggers = {
+    jenkins_ip = module.jenkins.jenkins_public_ip
+  }
+
+  provisioner "local-exec" {
+    command = "sleep 180 && ansible-playbook -i ../Ansible/inventory.ini ../Ansible/jenkins.yml"
+  }
+
+  depends_on = [null_resource.copy_key]
+}
+
+# ── Prometheus + Grafana ──────────────────────────────────────
 resource "helm_release" "prometheus" {
   name             = "prometheus"
   repository       = "https://prometheus-community.github.io/helm-charts"
