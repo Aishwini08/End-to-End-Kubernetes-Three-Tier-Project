@@ -204,10 +204,6 @@ resource "aws_iam_instance_profile" "jenkins" {
 
 # ── Ansible Automation ────────────────────────────────────────
 resource "null_resource" "ansible_setup" {
-  triggers = {
-    always_run = timestamp()
-  }
-
   provisioner "local-exec" {
     command = <<-EOT
       # copy latest pem key
@@ -219,7 +215,10 @@ resource "null_resource" "ansible_setup" {
       echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ${path.module}/../Ansible/inventory.ini
 
       # wait for EC2 to boot then run ansible
-      sleep 180 && ansible-playbook -i ${path.module}/../Ansible/inventory.ini ${path.module}/../Ansible/jenkins.yml
+      sleep 180 && ansible-playbook \
+        -i ${path.module}/../Ansible/inventory.ini \
+        ${path.module}/../Ansible/jenkins.yml \
+        --vault-password-file ~/vault-pass
     EOT
   }
 

@@ -4,3 +4,4 @@ terraform.tfstate
 terraform.tfstate.backup
 Terraform/secret.tfvars
 
+Ansible/.vault-pass

@@ -3,6 +3,13 @@
   hosts: jenkins
   become: true
 
+  vars:
+    github_token: "{{ vault_github_token }}"
+    github_username: "Aishwini08"
+    sonar_token: "{{ vault_sonar_token }}"
+    aws_account_id: "{{ vault_aws_account_id }}"
+    aws_region: "ap-south-1"
+
   tasks:
     - name: Remove stale Jenkins repo if present
       file:
@@ -41,7 +48,8 @@
 
     - name: Add Jenkins repository
       shell: |
-        echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" | tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+        echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" \
+          | tee /etc/apt/sources.list.d/jenkins.list > /dev/null
 
     - name: Update apt cache after Jenkins repo
       apt:
@@ -55,12 +63,6 @@
     - name: Start and enable Docker
       systemd:
         name: docker
-        state: started
-        enabled: yes
-
-    - name: Start and enable Jenkins
-      systemd:
-        name: jenkins
         state: started
         enabled: yes
 
@@ -128,22 +130,139 @@
         path: /var/sonarqube-installed
         state: touch
 
-    - name: Configure Jenkins URL
+    - name: Install JCasC and required plugins
       shell: |
-        JENKINS_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-        mkdir -p /var/lib/jenkins/
-        cat > /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml << EOF
-        <?xml version='1.1' encoding='UTF-8'?>
-        <jenkins.model.JenkinsLocationConfiguration>
-          <adminAddress>address not configured yet</adminAddress>
-          <jenkinsUrl>http://${JENKINS_IP}:8080/</jenkinsUrl>
-        </jenkins.model.JenkinsLocationConfiguration>
-        EOF
-        chown jenkins:jenkins /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml
-      args:
-        creates: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml
+        JENKINS_HOME=/var/lib/jenkins
+        mkdir -p $JENKINS_HOME/plugins
 
-    - name: Restart Jenkins after URL config
+        curl -sL https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.12.13/jenkins-plugin-manager-2.12.13.jar \
+          -o /tmp/jenkins-plugin-manager.jar
+
+        java -jar /tmp/jenkins-plugin-manager.jar \
+          --war /usr/share/jenkins/jenkins.war \
+          --plugin-download-directory $JENKINS_HOME/plugins \
+          --plugins \
+            configuration-as-code:latest \
+            git:latest \
+            workflow-aggregator:latest \
+            github:latest \
+            credentials-binding:latest \
+            docker-workflow:latest \
+            job-dsl:latest \
+            pipeline-github:latest \
+            sonar:latest \
+            aws-credentials:latest \
+            pipeline-aws:latest
+
+        chown -R jenkins:jenkins $JENKINS_HOME/plugins
+      args:
+        creates: /var/lib/jenkins/plugins/configuration-as-code.jpi
+
+    - name: Get Jenkins public IP
+      shell: curl -s http://169.254.169.254/latest/meta-data/public-ipv4
+      register: jenkins_ip
+
+    - name: Write JCasC configuration
+      copy:
+        dest: /var/lib/jenkins/jenkins.yaml
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+        content: |
+          jenkins:
+            systemMessage: "Jenkins configured automatically via JCasC"
+            numExecutors: 2
+            securityRealm:
+              local:
+                allowsSignup: false
+                users:
+                  - id: "admin"
+                    password: "admin123"
+            authorizationStrategy:
+              loggedInUsersCanDoAnything:
+                allowAnonymousRead: false
+            location:
+              url: "http://{{ jenkins_ip.stdout }}:8080/"
+
+          credentials:
+            system:
+              domainCredentials:
+                - credentials:
+                    - usernamePassword:
+                        scope: GLOBAL
+                        id: "github-credentials"
+                        description: "GitHub credentials"
+                        username: "{{ github_username }}"
+                        password: "{{ github_token }}"
+                    - string:
+                        scope: GLOBAL
+                        id: "sonar-token"
+                        description: "SonarQube token"
+                        secret: "{{ sonar_token }}"
+                    - string:
+                        scope: GLOBAL
+                        id: "aws-account-id"
+                        description: "AWS Account ID for ECR"
+                        secret: "{{ aws_account_id }}"
+
+          tool:
+            sonarRunnerInstallation:
+              installations:
+                - name: "SonarScanner"
+                  properties:
+                    - installSource:
+                        installers:
+                          - sonarRunnerInstaller:
+                              id: "5.0.1.3006"
+
+          unclassified:
+            sonarGlobalConfiguration:
+              buildWrapperEnabled: true
+              installations:
+                - name: "SonarQube"
+                  serverUrl: "http://{{ jenkins_ip.stdout }}:9000"
+                  credentialsId: "sonar-token"
+
+          jobs:
+            - script: >
+                pipelineJob('three-tier-pipeline') {
+                  triggers {
+                    githubPush()
+                  }
+                  definition {
+                    cpsScm {
+                      scm {
+                        git {
+                          remote {
+                            url('https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git')
+                          }
+                          branch('*/main')
+                        }
+                      }
+                      scriptPath('Jenkinsfile')
+                    }
+                  }
+                }
+
+    - name: Set JCasC config path in Jenkins service
+      lineinfile:
+        path: /usr/lib/systemd/system/jenkins.service
+        regexp: '^Environment="JAVA_OPTS='
+        line: 'Environment="JAVA_OPTS=-Djava.awt.headless=true -Dcasc.jenkins.config=/var/lib/jenkins/jenkins.yaml"'
+
+    - name: Skip Jenkins setup wizard
+      shell: |
+        echo 2.0 > /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
+        echo 2.0 > /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+        chown jenkins:jenkins /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
+        chown jenkins:jenkins /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+      args:
+        creates: /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+
+    - name: Reload systemd
+      shell: systemctl daemon-reload
+
+    - name: Restart Jenkins with JCasC
       systemd:
         name: jenkins
         state: restarted
@@ -154,28 +273,5 @@
         status_code: 200
       register: result
       until: result.status == 200
-      retries: 20
+      retries: 30
       delay: 15
-
-    - name: Get Jenkins initial admin password
-      slurp:
-        src: /var/lib/jenkins/secrets/initialAdminPassword
-      register: jenkins_password
-
-    - name: Download Jenkins CLI jar
-      get_url:
-        url: "http://localhost:8080/jnlpJars/jenkins-cli.jar"
-        dest: /tmp/jenkins-cli.jar
-
-    - name: Copy job config to server
-      copy:
-        src: jenkins-job.xml
-        dest: /tmp/jenkins-job.xml
-
-    - name: Create Jenkins pipeline job
-      shell: |
-        java -jar /tmp/jenkins-cli.jar \
-          -s http://localhost:8080 \
-          -auth admin:{{ jenkins_password.content | b64decode | trim }} \
-          create-job three-tier-pipeline < /tmp/jenkins-job.xml
-      ignore_errors: true
