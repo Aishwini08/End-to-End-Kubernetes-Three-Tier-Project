@@ -2,7 +2,7 @@
 <flow-definition plugin="workflow-job">
   <description>Three Tier App CI Pipeline</description>
   <keepDependencies>false</keepDependencies>
-  <definition class="org.jenkinsci.plugins.workflow.cbs.CpsScmFlowDefinition" plugin="workflow-cps">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
     <scm class="hudson.plugins.git.GitSCM" plugin="git">
       <configVersion>2</configVersion>
       <userRemoteConfigs>

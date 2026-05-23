@@ -203,46 +203,27 @@ resource "aws_iam_instance_profile" "jenkins" {
 }
 
 # ── Ansible Automation ────────────────────────────────────────
-resource "null_resource" "generate_inventory" {
+resource "null_resource" "ansible_setup" {
   triggers = {
-    jenkins_ip = module.jenkins.jenkins_public_ip
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "[jenkins]" > ../Ansible/inventory.ini
-      echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ../Ansible/inventory.ini
+      # copy latest pem key
+      cp ${path.module}/modules/jenkins/jenkins-key.pem ~/.ssh/jenkins-key.pem
+      chmod 400 ~/.ssh/jenkins-key.pem
+
+      # write inventory with correct IP
+      echo "[jenkins]" > ${path.module}/../Ansible/inventory.ini
+      echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ${path.module}/../Ansible/inventory.ini
+
+      # wait for EC2 to boot then run ansible
+      sleep 180 && ansible-playbook -i ${path.module}/../Ansible/inventory.ini ${path.module}/../Ansible/jenkins.yml
     EOT
   }
 
   depends_on = [module.jenkins]
-}
-
-resource "null_resource" "copy_key" {
-  triggers = {
-    jenkins_ip = module.jenkins.jenkins_public_ip
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cp ${path.module}/modules/jenkins/jenkins-key.pem ~/.ssh/jenkins-key.pem
-      chmod 400 ~/.ssh/jenkins-key.pem
-    EOT
-  }
-
-  depends_on = [null_resource.generate_inventory]
-}
-
-resource "null_resource" "run_ansible" {
-  triggers = {
-    jenkins_ip = module.jenkins.jenkins_public_ip
-  }
-
-  provisioner "local-exec" {
-    command = "sleep 180 && ansible-playbook -i ../Ansible/inventory.ini ../Ansible/jenkins.yml"
-  }
-
-  depends_on = [null_resource.copy_key]
 }
 
 # ── Prometheus + Grafana ──────────────────────────────────────
