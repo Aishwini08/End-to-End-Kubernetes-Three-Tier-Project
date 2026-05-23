@@ -3,6 +3,9 @@
   hosts: jenkins
   become: true
 
+  vars_files:
+    - secrets.yml
+
   vars:
     github_token: "{{ vault_github_token }}"
     github_username: "Aishwini08"
