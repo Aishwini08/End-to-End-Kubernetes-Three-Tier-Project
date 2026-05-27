@@ -1,1 +1,17 @@
-ÿşTerraform/kubectl
+# Terraform
+Terraform/.terraform/
+Terraform/*.tfstate
+Terraform/*.tfstate.backup
+Terraform/secret.tfvars
+Terraform/kubectl
+
+# Ansible
+Ansible/secrets.yml
+Ansible/.vault-pass
+
+# SSH Keys
+*.pem
+
+# Vault
+vault-pass
+.vault-pass
