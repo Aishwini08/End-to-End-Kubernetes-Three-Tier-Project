@@ -1,38 +1,36 @@
-# ── AWS / EKS ──────────────────────────────────────────────────
-variable "region" {
-  description = "AWS region to deploy resources"
-  type        = string
-  default     = "ap-south-1"
-}
-
-variable "cluster_name" {
-  description = "Name of the EKS cluster"
-  type        = string
-  default     = "three-tier-cluster"
-}
-
 variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
   type        = string
+  description = "CIDR block for the VPC"
   default     = "10.0.0.0/16"
 }
 
-# ── ArgoCD / GitHub ────────────────────────────────────────────
-variable "github_repo_url" {
-  description = "GitHub repository URL for ArgoCD to pull Helm charts"
+variable "region" {
   type        = string
-  default     = "https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git"
+  description = "AWS region"
+  default     = "ap-south-1"
 }
 
 variable "github_username" {
-  description = "GitHub username for ArgoCD repository access"
   type        = string
-  default     = "Aishwini08"
+  description = "GitHub username for ArgoCD repo access"
 }
 
 variable "github_token" {
-  description = "GitHub personal access token (pass via TF_VAR_github_token env var)"
   type        = string
+  description = "GitHub personal access token for ArgoCD repo access"
   sensitive   = true
-  default     = ""
+}
+
+variable "github_repo_url" {
+  type        = string
+  description = "Full HTTPS URL of the GitHub repository"
+  default     = "https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git"
+}
+
+# Pass via: export TF_VAR_grafana_admin_password="yourpassword"
+# or add grafana_admin_password = "..." in terraform.tfvars
+variable "grafana_admin_password" {
+  type        = string
+  description = "Grafana admin password for kube-prometheus-stack"
+  sensitive   = true
 }

@@ -1,3 +1,28 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.13"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.30"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.11"
+    }
+  }
+}
+
 module "vpc" {
   source   = "./modules/vpc"
   vpc_cidr = var.vpc_cidr
@@ -8,9 +33,8 @@ module "eks" {
   source = "./modules/eks"
 
   cluster_name = "three-tier-cluster"
-
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
+  vpc_id       = module.vpc.vpc_id
+  subnet_ids   = module.vpc.private_subnets
 }
 
 module "addons" {
@@ -26,6 +50,71 @@ module "jenkins" {
   vpc_id               = module.vpc.vpc_id
   public_subnet_id     = module.vpc.public_subnets[0]
   iam_instance_profile = aws_iam_instance_profile.jenkins.name
+
+  # IAM profile must exist before EC2 is created
+  depends_on = [aws_iam_instance_profile.jenkins]
+}
+
+# ── ECR Repositories ──────────────────────────────────────────
+resource "aws_ecr_repository" "frontend" {
+  name                 = "frontend"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_repository" "backend" {
+  name                 = "backend"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+# ── IAM role for Jenkins EC2 ──────────────────────────────────
+resource "aws_iam_role" "jenkins_ecr_role" {
+  name = "jenkins-ecr-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+# Required for docker build/push in Jenkinsfile
+resource "aws_iam_role_policy_attachment" "jenkins_ecr" {
+  role       = aws_iam_role.jenkins_ecr_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# Required for `aws eks update-kubeconfig` which kubectl/helm calls need.
+# Without this the Get AWS Account ID / ECR Login stages in Jenkinsfile fail.
+resource "aws_iam_role_policy" "jenkins_eks" {
+  name = "jenkins-eks-describe"
+  role = aws_iam_role.jenkins_ecr_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["eks:DescribeCluster", "eks:ListClusters"]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "jenkins" {
+  name = "jenkins-ecr-profile"
+  role = aws_iam_role.jenkins_ecr_role.name
 }
 
 # ── ArgoCD Installation via Helm ──────────────────────────────
@@ -44,7 +133,17 @@ resource "helm_release" "argocd" {
   depends_on = [module.eks]
 }
 
+# helm_release completes when pods are scheduled, but the Application
+# CRD may not be registered yet. This prevents kubernetes_manifest from
+# failing with "no matches for kind Application".
+resource "time_sleep" "wait_for_argocd_crds" {
+  create_duration = "60s"
+  depends_on      = [helm_release.argocd]
+}
+
 # ── GitHub credentials for ArgoCD ─────────────────────────────
+# NOTE: Terraform state stores these values in plaintext.
+# For production, use External Secrets Operator + AWS Secrets Manager.
 resource "kubernetes_secret" "github_creds" {
   metadata {
     name      = "github-creds"
@@ -80,7 +179,7 @@ resource "kubernetes_manifest" "argocd_app_frontend" {
         repoURL        = var.github_repo_url
         targetRevision = "main"
         path           = "helm-charts/frontend"
-        helm = { valueFiles = ["values.yaml"] }
+        helm           = { valueFiles = ["values.yaml"] }
       }
       destination = {
         server    = "https://kubernetes.default.svc"
@@ -92,7 +191,7 @@ resource "kubernetes_manifest" "argocd_app_frontend" {
       }
     }
   }
-  depends_on = [helm_release.argocd, kubernetes_secret.github_creds]
+  depends_on = [time_sleep.wait_for_argocd_crds, kubernetes_secret.github_creds]
 }
 
 resource "kubernetes_manifest" "argocd_app_backend" {
@@ -110,7 +209,7 @@ resource "kubernetes_manifest" "argocd_app_backend" {
         repoURL        = var.github_repo_url
         targetRevision = "main"
         path           = "helm-charts/backend"
-        helm = { valueFiles = ["values.yaml"] }
+        helm           = { valueFiles = ["values.yaml"] }
       }
       destination = {
         server    = "https://kubernetes.default.svc"
@@ -122,7 +221,7 @@ resource "kubernetes_manifest" "argocd_app_backend" {
       }
     }
   }
-  depends_on = [helm_release.argocd, kubernetes_secret.github_creds]
+  depends_on = [time_sleep.wait_for_argocd_crds, kubernetes_secret.github_creds]
 }
 
 resource "kubernetes_manifest" "argocd_app_mongodb" {
@@ -140,7 +239,7 @@ resource "kubernetes_manifest" "argocd_app_mongodb" {
         repoURL        = var.github_repo_url
         targetRevision = "main"
         path           = "helm-charts/mongodb"
-        helm = { valueFiles = ["values.yaml"] }
+        helm           = { valueFiles = ["values.yaml"] }
       }
       destination = {
         server    = "https://kubernetes.default.svc"
@@ -152,70 +251,31 @@ resource "kubernetes_manifest" "argocd_app_mongodb" {
       }
     }
   }
-  depends_on = [helm_release.argocd, kubernetes_secret.github_creds]
-}
-
-# ── ECR Repositories ──────────────────────────────────────────
-resource "aws_ecr_repository" "frontend" {
-  name                 = "frontend"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-}
-
-resource "aws_ecr_repository" "backend" {
-  name                 = "backend"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-}
-
-# ── IAM role for Jenkins EC2 to access ECR ────────────────────
-resource "aws_iam_role" "jenkins_ecr_role" {
-  name = "jenkins-ecr-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "jenkins_ecr" {
-  role       = aws_iam_role.jenkins_ecr_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-}
-
-resource "aws_iam_instance_profile" "jenkins" {
-  name = "jenkins-ecr-profile"
-  role = aws_iam_role.jenkins_ecr_role.name
+  depends_on = [time_sleep.wait_for_argocd_crds, kubernetes_secret.github_creds]
 }
 
 # ── Ansible Automation ────────────────────────────────────────
 resource "null_resource" "ansible_setup" {
   provisioner "local-exec" {
     command = <<-EOT
-      # copy latest pem key
       cp ${path.module}/modules/jenkins/jenkins-key.pem ~/.ssh/jenkins-key.pem
       chmod 400 ~/.ssh/jenkins-key.pem
 
-      # write inventory with correct IP
       echo "[jenkins]" > ${path.module}/../Ansible/inventory.ini
-      echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ${path.module}/../Ansible/inventory.ini
+      echo "${module.jenkins.jenkins_public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=/root/.ssh/jenkins-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" \
+        >> ${path.module}/../Ansible/inventory.ini
 
-      # wait for EC2 to boot then run ansible
-      sleep 180 && ansible-playbook \
+      # Poll SSH instead of fixed sleep
+      for i in $(seq 1 30); do
+        ssh -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=5 \
+            -i ~/.ssh/jenkins-key.pem \
+            ubuntu@${module.jenkins.jenkins_public_ip} exit 2>/dev/null && break
+        echo "Waiting for SSH... attempt $i/30"
+        sleep 10
+      done
+
+      ansible-playbook \
         -i ${path.module}/../Ansible/inventory.ini \
         ${path.module}/../Ansible/jenkins.yml \
         --vault-password-file ~/vault-pass
@@ -244,9 +304,10 @@ resource "helm_release" "prometheus" {
     value = "ClusterIP"
   }
 
+  # Set via: export TF_VAR_grafana_admin_password="yourpassword"
   set {
     name  = "grafana.adminPassword"
-    value = "admin123"
+    value = var.grafana_admin_password
   }
 
   depends_on = [module.eks, module.addons]

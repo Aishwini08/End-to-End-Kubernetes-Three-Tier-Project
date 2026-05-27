@@ -110,7 +110,8 @@
 
     - name: Install OWASP Dependency Check
       shell: |
-        wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip -O /tmp/dc.zip
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.1.0/dependency-check-10.1.0-release.zip \
+          -O /tmp/dc.zip
         unzip /tmp/dc.zip -d /opt/
         chmod +x /opt/dependency-check/bin/dependency-check.sh
         ln -sf /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
@@ -119,19 +120,22 @@
 
     - name: Run SonarQube container
       shell: |
-        docker run -d \
-          --name sonarqube \
-          --restart always \
-          -p 9000:9000 \
-          -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
-          sonarqube:lts-community
-      args:
-        creates: /var/sonarqube-installed
+        if docker ps -a --filter "name=^sonarqube$" --format "found" | grep -q "found"; then
+          docker start sonarqube 2>/dev/null || true
+        else
+          docker run -d \
+            --name sonarqube \
+            --restart always \
+            -p 9000:9000 \
+            -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+            sonarqube:lts-community
+        fi
 
-    - name: Mark SonarQube as installed
-      file:
-        path: /var/sonarqube-installed
-        state: touch
+    - name: Wait for Jenkins war to be present before installing plugins
+      wait_for:
+        path: /usr/share/java/jenkins.war
+        state: present
+        timeout: 120
 
     - name: Install JCasC and required plugins
       shell: |
@@ -142,7 +146,7 @@
           -o /tmp/jenkins-plugin-manager.jar
 
         java -jar /tmp/jenkins-plugin-manager.jar \
-          --war /usr/share/jenkins/jenkins.war \
+          --war /usr/share/java/jenkins.war \
           --plugin-download-directory $JENKINS_HOME/plugins \
           --plugins \
             configuration-as-code:latest \
@@ -154,15 +158,22 @@
             job-dsl:latest \
             pipeline-github:latest \
             sonar:latest \
-            aws-credentials:latest \
-            pipeline-aws:latest
+            aws-credentials:latest
 
         chown -R jenkins:jenkins $JENKINS_HOME/plugins
       args:
         creates: /var/lib/jenkins/plugins/configuration-as-code.jpi
 
+    - name: Get IMDSv2 token
+      shell: |
+        curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+          -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"
+      register: imds_token
+
     - name: Get Jenkins public IP
-      shell: curl -s http://169.254.169.254/latest/meta-data/public-ipv4
+      shell: |
+        curl -s -H "X-aws-ec2-metadata-token: {{ imds_token.stdout }}" \
+          http://169.254.169.254/latest/meta-data/public-ipv4
       register: jenkins_ip
 
     - name: Write JCasC configuration
@@ -170,7 +181,7 @@
         dest: /var/lib/jenkins/jenkins.yaml
         owner: jenkins
         group: jenkins
-        mode: '0644'
+        mode: '0600'
         content: |
           jenkins:
             systemMessage: "Jenkins configured automatically via JCasC"
@@ -184,8 +195,6 @@
             authorizationStrategy:
               loggedInUsersCanDoAnything:
                 allowAnonymousRead: false
-            location:
-              url: "http://{{ jenkins_ip.stdout }}:8080/"
 
           credentials:
             system:
@@ -199,7 +208,7 @@
                         password: "{{ github_token }}"
                     - string:
                         scope: GLOBAL
-                        id: "sonar-token"
+                        id: "sonarqube-token"
                         description: "SonarQube token"
                         secret: "{{ sonar_token }}"
                     - string:
@@ -219,12 +228,14 @@
                               id: "5.0.1.3006"
 
           unclassified:
+            location:
+              url: "http://{{ jenkins_ip.stdout }}:8080/"
             sonarGlobalConfiguration:
               buildWrapperEnabled: true
               installations:
                 - name: "SonarQube"
                   serverUrl: "http://{{ jenkins_ip.stdout }}:9000"
-                  credentialsId: "sonar-token"
+                  credentialsId: "sonarqube-token"
 
           jobs:
             - script: >
@@ -238,6 +249,7 @@
                         git {
                           remote {
                             url('https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git')
+                            credentials('github-credentials')
                           }
                           branch('*/main')
                         }
@@ -247,32 +259,71 @@
                   }
                 }
 
-    - name: Set JCasC config path in Jenkins service
-      lineinfile:
-        path: /usr/lib/systemd/system/jenkins.service
-        regexp: '^Environment="JAVA_OPTS='
-        line: 'Environment="JAVA_OPTS=-Djava.awt.headless=true -Dcasc.jenkins.config=/var/lib/jenkins/jenkins.yaml"'
+    - name: Create systemd drop-in directory for Jenkins
+      file:
+        path: /etc/systemd/system/jenkins.service.d
+        state: directory
+        mode: '0755'
 
-    - name: Skip Jenkins setup wizard
-      shell: |
-        echo 2.0 > /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
-        echo 2.0 > /var/lib/jenkins/jenkins.install.UpgradeWizard.state
-        chown jenkins:jenkins /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
-        chown jenkins:jenkins /var/lib/jenkins/jenkins.install.UpgradeWizard.state
-      args:
-        creates: /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+    - name: Write JCasC drop-in override for Jenkins systemd
+      copy:
+        dest: /etc/systemd/system/jenkins.service.d/casc.conf
+        mode: '0644'
+        content: |
+          [Service]
+          Environment="JAVA_OPTS=-Djava.awt.headless=true -Dcasc.jenkins.config=/var/lib/jenkins/jenkins.yaml"
+
+    # Get actual installed version so the marker matches exactly —
+    # using "2.0" caused Jenkins to treat it as an upgrade and
+    # overwrite the JCasC security config with legacy defaults
+    - name: Get installed Jenkins version
+      shell: dpkg -s jenkins | grep '^Version' | awk '{print $2}' | cut -d. -f1-3
+      register: jenkins_version
+
+    - name: Skip Jenkins setup wizard - install version marker
+      copy:
+        dest: /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
+        content: "{{ jenkins_version.stdout }}\n"
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+
+    - name: Skip Jenkins setup wizard - upgrade wizard state
+      copy:
+        dest: /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+        content: "{{ jenkins_version.stdout }}\n"
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+
+    # Clear stale user DB and config from any previous run so
+    # JCasC has full control over the admin user and security config
+    - name: Remove existing Jenkins users directory
+      file:
+        path: /var/lib/jenkins/users
+        state: absent
+
+    - name: Remove existing Jenkins config.xml
+      file:
+        path: /var/lib/jenkins/config.xml
+        state: absent
 
     - name: Reload systemd
       shell: systemctl daemon-reload
 
-    - name: Restart Jenkins with JCasC
+    - name: Restart and enable Jenkins
       systemd:
         name: jenkins
         state: restarted
+        enabled: yes
 
-    - name: Wait for Jenkins to be ready
+    - name: Wait for Jenkins to be fully ready
       uri:
-        url: "http://localhost:8080/login"
+        url: "http://localhost:8080/api/json"
+        method: GET
+        user: admin
+        password: admin123
+        force_basic_auth: yes
         status_code: 200
       register: result
       until: result.status == 200
