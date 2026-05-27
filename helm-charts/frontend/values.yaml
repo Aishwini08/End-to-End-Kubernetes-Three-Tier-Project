@@ -2,7 +2,6 @@ replicaCount: 1
 image:
   repository: 266798532280.dkr.ecr.ap-south-1.amazonaws.com/frontend
   pullPolicy: Always
-<<<<<<< HEAD
   tag: "8"
 imagePullSecrets: []
 nameOverride: ""
