@@ -3,17 +3,8 @@
   hosts: jenkins
   become: true
 
-  vars_files:
-    - secrets.yml
-
-  vars:
-    github_token: "{{ vault_github_token }}"
-    github_username: "Aishwini08"
-    sonar_token: "{{ vault_sonar_token }}"
-    aws_account_id: "{{ vault_aws_account_id }}"
-    aws_region: "ap-south-1"
-
   tasks:
+
     - name: Remove stale Jenkins repo if present
       file:
         path: "{{ item }}"
@@ -21,6 +12,7 @@
       loop:
         - /etc/apt/sources.list.d/jenkins.list
         - /etc/apt/keyrings/jenkins-keyring.asc
+        - /usr/share/keyrings/jenkins-keyring.gpg
 
     - name: Update apt cache
       apt:
@@ -46,12 +38,13 @@
 
     - name: Add Jenkins GPG key
       shell: |
-        wget -O /etc/apt/keyrings/jenkins-keyring.asc \
-          https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        gpg --keyserver keyserver.ubuntu.com --recv-keys 7198F4B714ABFC68
+        gpg --export 7198F4B714ABFC68 | tee /usr/share/keyrings/jenkins-keyring.gpg > /dev/null
+        chmod 644 /usr/share/keyrings/jenkins-keyring.gpg
 
     - name: Add Jenkins repository
       shell: |
-        echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" \
+        echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" \
           | tee /etc/apt/sources.list.d/jenkins.list > /dev/null
 
     - name: Update apt cache after Jenkins repo
@@ -131,201 +124,22 @@
             sonarqube:lts-community
         fi
 
-    - name: Wait for Jenkins war to be present before installing plugins
-      wait_for:
-        path: /usr/share/java/jenkins.war
-        state: present
-        timeout: 120
-
-    - name: Install JCasC and required plugins
-      shell: |
-        JENKINS_HOME=/var/lib/jenkins
-        mkdir -p $JENKINS_HOME/plugins
-
-        curl -sL https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.12.13/jenkins-plugin-manager-2.12.13.jar \
-          -o /tmp/jenkins-plugin-manager.jar
-
-        java -jar /tmp/jenkins-plugin-manager.jar \
-          --war /usr/share/java/jenkins.war \
-          --plugin-download-directory $JENKINS_HOME/plugins \
-          --plugins \
-            configuration-as-code:latest \
-            git:latest \
-            workflow-aggregator:latest \
-            github:latest \
-            credentials-binding:latest \
-            docker-workflow:latest \
-            job-dsl:latest \
-            pipeline-github:latest \
-            sonar:latest \
-            aws-credentials:latest
-
-        chown -R jenkins:jenkins $JENKINS_HOME/plugins
-      args:
-        creates: /var/lib/jenkins/plugins/configuration-as-code.jpi
-
-    - name: Get IMDSv2 token
-      shell: |
-        curl -s -X PUT "http://169.254.169.254/latest/api/token" \
-          -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"
-      register: imds_token
-
-    - name: Get Jenkins public IP
-      shell: |
-        curl -s -H "X-aws-ec2-metadata-token: {{ imds_token.stdout }}" \
-          http://169.254.169.254/latest/meta-data/public-ipv4
-      register: jenkins_ip
-
-    - name: Write JCasC configuration
-      copy:
-        dest: /var/lib/jenkins/jenkins.yaml
-        owner: jenkins
-        group: jenkins
-        mode: '0600'
-        content: |
-          jenkins:
-            systemMessage: "Jenkins configured automatically via JCasC"
-            numExecutors: 2
-            securityRealm:
-              local:
-                allowsSignup: false
-                users:
-                  - id: "admin"
-                    password: "admin123"
-            authorizationStrategy:
-              loggedInUsersCanDoAnything:
-                allowAnonymousRead: false
-
-          credentials:
-            system:
-              domainCredentials:
-                - credentials:
-                    - usernamePassword:
-                        scope: GLOBAL
-                        id: "github-credentials"
-                        description: "GitHub credentials"
-                        username: "{{ github_username }}"
-                        password: "{{ github_token }}"
-                    - string:
-                        scope: GLOBAL
-                        id: "sonarqube-token"
-                        description: "SonarQube token"
-                        secret: "{{ sonar_token }}"
-                    - string:
-                        scope: GLOBAL
-                        id: "aws-account-id"
-                        description: "AWS Account ID for ECR"
-                        secret: "{{ aws_account_id }}"
-
-          tool:
-            sonarRunnerInstallation:
-              installations:
-                - name: "SonarScanner"
-                  properties:
-                    - installSource:
-                        installers:
-                          - sonarRunnerInstaller:
-                              id: "5.0.1.3006"
-
-          unclassified:
-            location:
-              url: "http://{{ jenkins_ip.stdout }}:8080/"
-            sonarGlobalConfiguration:
-              buildWrapperEnabled: true
-              installations:
-                - name: "SonarQube"
-                  serverUrl: "http://{{ jenkins_ip.stdout }}:9000"
-                  credentialsId: "sonarqube-token"
-
-          jobs:
-            - script: >
-                pipelineJob('three-tier-pipeline') {
-                  triggers {
-                    githubPush()
-                  }
-                  definition {
-                    cpsScm {
-                      scm {
-                        git {
-                          remote {
-                            url('https://github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git')
-                            credentials('github-credentials')
-                          }
-                          branch('*/main')
-                        }
-                      }
-                      scriptPath('Jenkinsfile')
-                    }
-                  }
-                }
-
-    - name: Create systemd drop-in directory for Jenkins
-      file:
-        path: /etc/systemd/system/jenkins.service.d
-        state: directory
-        mode: '0755'
-
-    - name: Write JCasC drop-in override for Jenkins systemd
-      copy:
-        dest: /etc/systemd/system/jenkins.service.d/casc.conf
-        mode: '0644'
-        content: |
-          [Service]
-          Environment="JAVA_OPTS=-Djava.awt.headless=true -Dcasc.jenkins.config=/var/lib/jenkins/jenkins.yaml"
-
-    # Get actual installed version so the marker matches exactly —
-    # using "2.0" caused Jenkins to treat it as an upgrade and
-    # overwrite the JCasC security config with legacy defaults
-    - name: Get installed Jenkins version
-      shell: dpkg -s jenkins | grep '^Version' | awk '{print $2}' | cut -d. -f1-3
-      register: jenkins_version
-
-    - name: Skip Jenkins setup wizard - install version marker
-      copy:
-        dest: /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
-        content: "{{ jenkins_version.stdout }}\n"
-        owner: jenkins
-        group: jenkins
-        mode: '0644'
-
-    - name: Skip Jenkins setup wizard - upgrade wizard state
-      copy:
-        dest: /var/lib/jenkins/jenkins.install.UpgradeWizard.state
-        content: "{{ jenkins_version.stdout }}\n"
-        owner: jenkins
-        group: jenkins
-        mode: '0644'
-
-    # Clear stale user DB and config from any previous run so
-    # JCasC has full control over the admin user and security config
-    - name: Remove existing Jenkins users directory
-      file:
-        path: /var/lib/jenkins/users
-        state: absent
-
-    - name: Remove existing Jenkins config.xml
-      file:
-        path: /var/lib/jenkins/config.xml
-        state: absent
-
-    - name: Reload systemd
-      shell: systemctl daemon-reload
-
-    - name: Restart and enable Jenkins
+    - name: Start and enable Jenkins
       systemd:
         name: jenkins
-        state: restarted
+        state: started
         enabled: yes
 
-    - name: Wait for Jenkins to be fully ready
+    - name: Wait for Jenkins to be ready
       uri:
-        url: "http://localhost:8080/api/json"
+        url: "http://localhost:8080/login"
         method: GET
-        user: admin
-        password: admin123
-        force_basic_auth: yes
         status_code: 200
       register: result
       until: result.status == 200
       retries: 30
       delay: 15
+
+    - name: Print Jenkins initial admin password location
+      debug:
+        msg: "Jenkins is up! Retrieve your initial admin password from: /var/lib/jenkins/secrets/initialAdminPassword"
