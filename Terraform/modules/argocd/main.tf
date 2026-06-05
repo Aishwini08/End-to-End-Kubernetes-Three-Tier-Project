@@ -13,7 +13,7 @@ resource "helm_release" "argocd" {
 }
 
 resource "time_sleep" "wait_for_argocd_crds" {
-  create_duration = "60s"
+  create_duration = "120s"
   depends_on      = [helm_release.argocd]
 }
 
