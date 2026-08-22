@@ -33,8 +33,11 @@ spec:
               key: password
         resources:
           requests:
-            cpu: "200m"
-            memory: "256Mi"
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
         volumeMounts:
         - name: mongo-data
           mountPath: /data/db
