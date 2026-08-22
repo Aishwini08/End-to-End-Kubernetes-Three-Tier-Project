@@ -1,48 +1,30 @@
-image:
-  repository: mongo
-  tag: "5"
-  pullPolicy: IfNotPresent
+mongodb:
+  architecture: replicaset
+  replicaCount: 3
 
-service:
-  type: ClusterIP
-  port: 27017
+  auth:
+    enabled: true
+    rootUser: admin
+    rootPassword: password123
+    databases:
+      - tasksdb
+    usernames:
+      - admin
+    passwords:
+      - password123
 
-storage:
-  size: 1Gi
-  storageClassName: gp2-immediate
+  persistence:
+    enabled: true
+    storageClass: gp2-immediate
+    size: 1Gi
 
-auth:
-  username: admin
-  password: password123
-  database: tasksdb
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: false
-  automount: false
-  annotations: {}
-  name: ""
-
-ingress:
-  enabled: false
-
-httpRoute:
-  enabled: false
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 3
-  targetCPUUtilizationPercentage: 80
-
-
-
-resources:
-  requests:
-    cpu: 200m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
+  service:
+    nameOverride: mongodb-service

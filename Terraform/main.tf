@@ -81,7 +81,7 @@ resource "null_resource" "apply_storageclass" {
   depends_on = [null_resource.update_kubeconfig]
 
   provisioner "local-exec" {
-    command = "kubectl apply -f ${path.module}/../helm-charts/storageclass.yaml"
+    command = "kubectl apply -f ${path.module}/../helm-charts/storageclass.yaml && kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
   }
 }
 

@@ -20,7 +20,7 @@ service:
   port: 5000
 env:
   - name: MONGO_CONN_STR
-    value: "mongodb://admin:password123@mongodb-service.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin"
+    value: "mongodb://admin:password123@mongodb-service-0.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-1.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-2.mongodb-service-headless.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin&replicaSet=rs0"
   - name: PORT
     value: "5000"
 ingress:
@@ -68,7 +68,7 @@ readinessProbe:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 100
+  maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 volumes: []
 volumeMounts: []

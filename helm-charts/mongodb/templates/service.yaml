@@ -1,10 +1,1 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: mongodb-service
-spec:
-  ports:
-    - port: 27017
-  clusterIP: None
-  selector:
-    app: mongodb
+# Bitnami MongoDB chart manages its own services
