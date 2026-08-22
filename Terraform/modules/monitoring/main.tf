@@ -36,7 +36,12 @@ resource "helm_release" "prometheus" {
           group_interval: 5m
           repeat_interval: 12h
           receiver: slack-alerts
+          routes:
+            - matchers:
+                - alertname = "Watchdog"
+              receiver: 'null'
         receivers:
+          - name: 'null'
           - name: slack-alerts
             slack_configs:
               - api_url: '${var.slack_webhook_url}'
@@ -130,7 +135,7 @@ resource "helm_release" "mongodb_exporter" {
   repository       = "https://prometheus-community.github.io/helm-charts"
   chart            = "prometheus-mongodb-exporter"
   namespace        = "three-tier"
-  create_namespace = false
+  create_namespace = true
   version          = "3.6.0"
 
   set {

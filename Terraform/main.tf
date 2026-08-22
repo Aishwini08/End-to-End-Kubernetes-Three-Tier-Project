@@ -68,6 +68,10 @@ module "jenkins" {
 resource "null_resource" "update_kubeconfig" {
   depends_on = [module.eks]
 
+  triggers = {
+    cluster_name = module.eks.cluster_name
+  }
+
   provisioner "local-exec" {
     command = "aws eks update-kubeconfig --region ${var.region} --name three-tier-cluster"
   }
@@ -117,7 +121,7 @@ module "argocd" {
   github_token    = var.github_token
   github_repo_url = var.github_repo_url
 
-  depends_on = [module.eks, module.addons]
+  depends_on = [module.eks, module.addons, null_resource.update_kubeconfig]
 }
 
 # ── ArgoCD Applications (requires CRDs from above) ───────────
@@ -135,5 +139,5 @@ module "monitoring" {
   slack_webhook_url      = var.slack_webhook_url
   slack_channel          = var.slack_channel
 
-  depends_on = [module.eks, module.addons]
+  depends_on = [module.eks, module.addons, null_resource.update_kubeconfig]
 }
