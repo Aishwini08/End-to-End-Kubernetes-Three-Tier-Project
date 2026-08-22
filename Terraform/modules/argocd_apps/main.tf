@@ -80,8 +80,7 @@ resource "null_resource" "argocd_apps" {
 
   provisioner "local-exec" {
     when       = destroy
-    command    = "kubectl delete application frontend backend mongodb -n argocd --ignore-not-found 2>nul"
-    interpreter = ["cmd", "/C"]
+    command    = "kubectl delete application frontend backend mongodb -n argocd --ignore-not-found || true"
     on_failure = continue
   }
 }

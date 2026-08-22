@@ -138,25 +138,17 @@ resource "helm_release" "mongodb_exporter" {
   create_namespace = true
   version          = "3.6.0"
 
-  set {
-    name  = "mongodb.uri"
-    value = "mongodb://admin:password123@mongodb.three-tier.svc.cluster.local:27017/admin"
-  }
-
-  set {
-    name  = "serviceMonitor.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "serviceMonitor.namespace"
-    value = "monitoring"
-  }
-
-  set {
-    name  = "serviceMonitor.additionalLabels.release"
-    value = "prometheus"
-  }
+  values = [
+    <<-EOT
+    mongodb:
+      uri: "mongodb://admin:password123@mongodb-service-0.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-1.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-2.mongodb-service-headless.three-tier.svc.cluster.local:27017/admin?authSource=admin&replicaSet=rs0"
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      additionalLabels:
+        release: prometheus
+    EOT
+  ]
 
   depends_on = [helm_release.prometheus]
 }

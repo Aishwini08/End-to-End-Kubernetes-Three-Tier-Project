@@ -37,7 +37,6 @@ variable "slack_webhook_url" {
   type        = string
   description = "Slack Incoming Webhook URL for AlertManager notifications"
   sensitive   = true
-  default     = ""
 }
 
 variable "slack_channel" {

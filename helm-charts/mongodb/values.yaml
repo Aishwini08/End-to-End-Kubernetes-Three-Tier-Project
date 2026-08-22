@@ -1,6 +1,7 @@
 mongodb:
   architecture: replicaset
   replicaCount: 3
+  fullnameOverride: mongodb-service
 
   auth:
     enabled: true
@@ -25,6 +26,3 @@ mongodb:
     limits:
       cpu: 500m
       memory: 512Mi
-
-  service:
-    nameOverride: mongodb-service

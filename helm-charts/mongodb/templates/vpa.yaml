@@ -7,7 +7,7 @@ spec:
   targetRef:
     apiVersion: apps/v1
     kind: StatefulSet
-    name: mongodb-mongodb
+    name: mongodb-service
   updatePolicy:
     updateMode: Auto
   resourcePolicy:
