@@ -1,3 +1,6 @@
+httpRoute:
+  enabled: false
+
 mongodb:
   architecture: replicaset
   replicaCount: 3
