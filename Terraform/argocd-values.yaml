@@ -1,0 +1,27 @@
+server:
+  service:
+    # LoadBalancer creates an AWS ELB so you can access the ArgoCD UI
+    # Change to ClusterIP if you only want kubectl port-forward access
+    type: LoadBalancer
+
+  extraArgs:
+    - --insecure   # Remove this line once you add a TLS certificate
+
+configs:
+  params:
+    server.insecure: "true"   # Required when running without TLS
+
+  # Default admin password - change immediately after first login
+  # Generate with: htpasswd -nbBC 10 "" 'yourpassword' | tr -d ':\n' | sed 's/$2y/$2a/'
+  secret:
+    argocdServerAdminPassword: ""   # leave empty to get auto-generated password
+
+global:
+  # Resources for ArgoCD components - suitable for t3.medium nodes
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

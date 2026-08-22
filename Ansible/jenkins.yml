@@ -1,0 +1,154 @@
+---
+- name: Configure Jenkins Server
+  hosts: jenkins
+  become: true
+
+  tasks:
+
+    - name: Remove stale Jenkins repo if present
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/jenkins.list
+        - /etc/apt/keyrings/jenkins-keyring.asc
+        - /usr/share/keyrings/jenkins-keyring.gpg
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - gnupg
+          - wget
+          - fontconfig
+          - openjdk-21-jre
+          - docker.io
+          - unzip
+        state: present
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Jenkins GPG key
+      shell: |
+        gpg --keyserver keyserver.ubuntu.com --recv-keys 7198F4B714ABFC68
+        gpg --export 7198F4B714ABFC68 | tee /usr/share/keyrings/jenkins-keyring.gpg > /dev/null
+        chmod 644 /usr/share/keyrings/jenkins-keyring.gpg
+
+    - name: Add Jenkins repository
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" \
+          | tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+    - name: Update apt cache after Jenkins repo
+      apt:
+        update_cache: yes
+
+    - name: Install Jenkins with retry
+      shell: |
+        for i in 1 2 3; do
+          apt-get install -y \
+            -o Acquire::http::Timeout=300 \
+            -o Acquire::https::Timeout=300 \
+            -o APT::Get::Fix-Missing=true \
+            jenkins && break
+          echo "Attempt $i failed, retrying in 30s..."
+          sleep 30
+        done
+      args:
+        creates: /usr/bin/jenkins
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Add jenkins user to docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
+    - name: Install kubectl
+      shell: |
+        curl -Lo /tmp/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+      args:
+        creates: /usr/local/bin/kubectl
+
+    - name: Install Helm
+      shell: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Install AWS CLI
+      shell: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+        unzip /tmp/awscliv2.zip -d /tmp/
+        /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Install Trivy
+      shell: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      args:
+        creates: /usr/local/bin/trivy
+
+    - name: Install OWASP Dependency Check
+      shell: |
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.1.0/dependency-check-10.1.0-release.zip \
+          -O /tmp/dc.zip
+        unzip /tmp/dc.zip -d /opt/
+        chmod +x /opt/dependency-check/bin/dependency-check.sh
+        ln -sf /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+      args:
+        creates: /usr/local/bin/dependency-check
+
+    - name: Run SonarQube container
+      shell: |
+        if docker ps -a --filter "name=^sonarqube$" --format "found" | grep -q "found"; then
+          docker start sonarqube 2>/dev/null || true
+        else
+          docker run -d \
+            --name sonarqube \
+            --restart always \
+            -p 9000:9000 \
+            -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+            sonarqube:lts-community
+        fi
+
+    - name: Start and enable Jenkins
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Wait for Jenkins to be ready
+      uri:
+        url: "http://localhost:8080/login"
+        method: GET
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 15
+
+    - name: Print Jenkins initial admin password location
+      debug:
+        msg: "Jenkins is up! Retrieve your initial admin password from: /var/lib/jenkins/secrets/initialAdminPassword"
