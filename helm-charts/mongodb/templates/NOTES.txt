@@ -1,9 +1,0 @@
-MongoDB replica set "{{ .Release.Name }}" has been deployed.
-
-To connect to MongoDB from within the cluster:
-
-  mongodb://<username>:<password>@{{ .Values.mongodb.fullnameOverride }}-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/?replicaSet=rs0
-
-To check replica set status:
-
-  kubectl exec -it {{ .Values.mongodb.fullnameOverride }}-0 -n {{ .Release.Namespace }} -- mongosh --eval "rs.status()"

@@ -1,2 +1,0 @@
-# Bitnami MongoDB chart handles all Kubernetes resources
-# StatefulSet, Services, Secrets are managed by the dependency chart
