@@ -1,10 +1,18 @@
 httpRoute:
   enabled: false
 
+ingress:
+  enabled: false
+
 mongodb:
   architecture: replicaset
   replicaCount: 3
   fullnameOverride: mongodb-service
+
+  image:
+    registry: docker.io
+    repository: bitnami/mongodb
+    tag: latest
 
   auth:
     enabled: true
