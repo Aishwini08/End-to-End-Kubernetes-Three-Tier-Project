@@ -3,7 +3,7 @@ kind: StorageClass
 metadata:
   name: gp2-immediate
 provisioner: kubernetes.io/aws-ebs
-volumeBindingMode: Immediate   
-reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
 parameters:
   type: gp2

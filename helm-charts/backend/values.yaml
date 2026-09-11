@@ -20,7 +20,7 @@ service:
   port: 5000
 env:
   - name: MONGO_CONN_STR
-    value: "mongodb://admin:password123@mongodb-headless.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin"
+    value: "mongodb://admin:password123@mongodb-0.mongodb-headless.three-tier.svc.cluster.local:27017,mongodb-1.mongodb-headless.three-tier.svc.cluster.local:27017,mongodb-2.mongodb-headless.three-tier.svc.cluster.local:27017/tasksdb?authSource=admin&replicaSet=rs0"
   - name: PORT
     value: "5000"
 ingress:

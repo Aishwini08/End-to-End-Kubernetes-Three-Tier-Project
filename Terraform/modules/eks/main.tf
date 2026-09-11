@@ -18,8 +18,8 @@ module "eks" {
     worker-nodes = {
       instance_types = ["t3.large"]
       min_size       = 1
-      max_size       = 3
-      desired_size   = 2
+      max_size       = 4
+      desired_size   = 3
 
       iam_role_additional_policies = {
         ecr_read = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
