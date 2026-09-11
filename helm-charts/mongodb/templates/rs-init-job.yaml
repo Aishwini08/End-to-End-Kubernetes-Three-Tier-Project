@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-rs-init
+  namespace: three-tier
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: rs-init
+          image: mongo:6.0
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+
+              # wait for mongodb-0 to be reachable
+              until mongosh \
+                --host mongodb-0.mongodb-headless.three-tier.svc.cluster.local \
+                -u admin -p password123 \
+                --authenticationDatabase admin \
+                --eval "print('ready')" &>/dev/null; do
+                echo "waiting for mongodb-0..."
+                sleep 5
+              done
+
+              # check if replica set already initiated
+              STATUS=$(mongosh \
+                --host mongodb-0.mongodb-headless.three-tier.svc.cluster.local \
+                -u admin -p password123 \
+                --authenticationDatabase admin \
+                --quiet --eval "rs.status().ok" 2>/dev/null || echo "0")
+
+              if [ "$STATUS" = "1" ]; then
+                echo "replica set already initiated, skipping"
+                exit 0
+              fi
+
+              # initiate replica set with 2 data nodes + 1 arbiter
+              mongosh \
+                --host mongodb-0.mongodb-headless.three-tier.svc.cluster.local \
+                -u admin -p password123 \
+                --authenticationDatabase admin \
+                --eval '
+                  rs.initiate({
+                    _id: "rs0",
+                    members: [
+                      { _id: 0, host: "mongodb-0.mongodb-headless.three-tier.svc.cluster.local:27017" },
+                      { _id: 1, host: "mongodb-1.mongodb-headless.three-tier.svc.cluster.local:27017" },
+                      { _id: 2, host: "mongodb-arbiter-0.mongodb-arbiter.three-tier.svc.cluster.local:27017", arbiterOnly: true }
+                    ]
+                  })
+                '
+              echo "replica set initiated successfully"
