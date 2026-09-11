@@ -162,7 +162,8 @@ pipeline {
                     sh '''
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins CI"
-                        git pull https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main || true
+                        git fetch https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main
+                        git rebase FETCH_HEAD
                         git add helm-charts/frontend/values.yaml helm-charts/backend/values.yaml
                         git diff --staged --quiet || git commit -m "CI: update image tags to ${BUILD_NUMBER} [skip ci] [ci skip]"
                         git push https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main
