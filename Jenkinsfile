@@ -24,13 +24,17 @@ pipeline {
                         commitMsg.contains('[ci skip]') ||
                         commitAuthor == 'Jenkins CI') {
                         currentBuild.result = 'NOT_BUILT'
-                        error('Skipping CI - commit was made by Jenkins automation')
+                        currentBuild.displayName = "#${BUILD_NUMBER} [SKIPPED]"
+                        echo 'Skipping CI - commit was made by Jenkins automation'
+                        return
                     }
+                    env.SHOULD_RUN = 'true'
                 }
             }
         }
 
         stage('OWASP Dependency Check') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
                     mkdir -p reports
@@ -59,6 +63,7 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
@@ -79,6 +84,7 @@ pipeline {
         }
 
         stage('Get AWS Account ID') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 script {
                     env.AWS_ACCOUNT_ID   = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
@@ -91,6 +97,7 @@ pipeline {
         }
 
         stage('ECR Login') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
             
                 sh '''
@@ -102,6 +109,7 @@ pipeline {
         }
 
         stage('Build & Push Frontend') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
                     docker system prune -af || true
@@ -112,6 +120,7 @@ pipeline {
         }
 
         stage('Build & Push Backend') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                
                 sh '''
@@ -123,6 +132,7 @@ pipeline {
         }
 
         stage('Trivy Image Scan') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
                     trivy image --severity HIGH,CRITICAL --no-progress ${ECR_FRONTEND_URL}:${BUILD_NUMBER} || true
@@ -132,6 +142,7 @@ pipeline {
         }
 
         stage('Update Helm Chart Tags') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                
                 sh """
@@ -145,6 +156,7 @@ pipeline {
         }
 
         stage('Push Updated Helm Charts') {
+            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
                     sh '''

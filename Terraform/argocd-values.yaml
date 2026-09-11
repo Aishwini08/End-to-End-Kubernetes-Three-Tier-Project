@@ -10,6 +10,8 @@ server:
 configs:
   params:
     server.insecure: "true"   # Required when running without TLS
+    application.instanceLabelKey: argocd.argoproj.io/app-name
+    timeout.reconciliation: 60s   # Poll GitHub every 60s instead of default 3min
 
   # Default admin password - change immediately after first login
   # Generate with: htpasswd -nbBC 10 "" 'yourpassword' | tr -d ':\n' | sed 's/$2y/$2a/'

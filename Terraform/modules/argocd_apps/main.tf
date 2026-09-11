@@ -28,6 +28,12 @@ resource "null_resource" "argocd_apps" {
             prune: true
             selfHeal: true
           syncOptions: [CreateNamespace=true]
+          retry:
+            limit: 3
+            backoff:
+              duration: 10s
+              factor: 2
+              maxDuration: 1m
       ---
       apiVersion: argoproj.io/v1alpha1
       kind: Application
@@ -51,6 +57,12 @@ resource "null_resource" "argocd_apps" {
             prune: true
             selfHeal: true
           syncOptions: [CreateNamespace=true]
+          retry:
+            limit: 3
+            backoff:
+              duration: 10s
+              factor: 2
+              maxDuration: 1m
       ---
       apiVersion: argoproj.io/v1alpha1
       kind: Application
@@ -74,6 +86,12 @@ resource "null_resource" "argocd_apps" {
             prune: true
             selfHeal: true
           syncOptions: [CreateNamespace=true]
+          retry:
+            limit: 3
+            backoff:
+              duration: 10s
+              factor: 2
+              maxDuration: 1m
       EOF
     EOT
   }

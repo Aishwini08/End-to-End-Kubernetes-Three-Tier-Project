@@ -2,11 +2,7 @@ replicaCount: 1
 image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
-<<<<<<< HEAD
-  tag: "9"
-=======
   tag: "11"
->>>>>>> 6c8e374cbb59c61a7c19c508d5b874133ca3f651
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -71,8 +67,8 @@ readinessProbe:
   periodSeconds: 10
 autoscaling:
   enabled: true
-  minReplicas: 20
-  maxReplicas: 50
+  minReplicas: 1
+  maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 volumes: []
 volumeMounts: []
