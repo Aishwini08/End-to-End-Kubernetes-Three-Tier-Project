@@ -18,8 +18,6 @@ spec:
             - bash
             - -c
             - |
-              set -e
-
               # wait for mongodb-0 to be reachable
               until mongosh \
                 --host mongodb-0.mongodb-headless.three-tier.svc.cluster.local \
@@ -35,7 +33,7 @@ spec:
                 --host mongodb-0.mongodb-headless.three-tier.svc.cluster.local \
                 -u admin -p password123 \
                 --authenticationDatabase admin \
-                --quiet --eval "rs.status().ok" 2>/dev/null || echo "0")
+                --quiet --eval "try { rs.status().ok } catch(e) { 0 }" 2>/dev/null)
 
               if [ "$STATUS" = "1" ]; then
                 echo "replica set already initiated, skipping"

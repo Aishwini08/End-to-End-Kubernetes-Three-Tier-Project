@@ -141,7 +141,7 @@ resource "helm_release" "mongodb_exporter" {
   values = [
     <<-EOT
     mongodb:
-      uri: "mongodb://admin:password123@mongodb-service-0.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-1.mongodb-service-headless.three-tier.svc.cluster.local:27017,mongodb-service-2.mongodb-service-headless.three-tier.svc.cluster.local:27017/admin?authSource=admin&replicaSet=rs0"
+      uri: "mongodb://admin:password123@mongodb-0.mongodb-headless.three-tier.svc.cluster.local:27017,mongodb-1.mongodb-headless.three-tier.svc.cluster.local:27017/admin?authSource=admin&replicaSet=rs0"
     serviceMonitor:
       enabled: true
       namespace: monitoring

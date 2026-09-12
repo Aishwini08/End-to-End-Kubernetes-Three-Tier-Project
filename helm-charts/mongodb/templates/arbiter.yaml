@@ -14,6 +14,15 @@ spec:
       labels:
         app: mongodb-arbiter
     spec:
+      initContainers:
+        - name: fix-keyfile-perms
+          image: busybox
+          command: ["sh", "-c", "cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile && chown 999:999 /keyfile/keyfile"]
+          volumeMounts:
+            - name: keyfile-secret
+              mountPath: /keyfile-secret
+            - name: keyfile
+              mountPath: /keyfile
       containers:
         - name: mongodb-arbiter
           image: mongo:6.0
@@ -23,6 +32,8 @@ spec:
             - "--bind_ip_all"
             - "--port"
             - "27017"
+            - "--keyFile"
+            - "/keyfile/keyfile"
           ports:
             - containerPort: 27017
           resources:
@@ -32,6 +43,15 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+          volumeMounts:
+            - name: keyfile
+              mountPath: /keyfile
+      volumes:
+        - name: keyfile-secret
+          secret:
+            secretName: mongodb-keyfile
+        - name: keyfile
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
