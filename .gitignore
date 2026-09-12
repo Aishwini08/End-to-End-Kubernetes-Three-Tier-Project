@@ -1,7 +1,7 @@
 # Terraform
-Terraform/.terraform/
-Terraform/*.tfstate
-Terraform/*.tfstate.backup
+.terraform/
+*.tfstate
+*.tfstate.*
 Terraform/secret.tfvars
 Terraform/kubectl
 
