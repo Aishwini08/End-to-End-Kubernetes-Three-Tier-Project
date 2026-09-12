@@ -65,30 +65,3 @@ resource "aws_eks_addon" "ebs_csi" {
     update = "30m"
   }
 }
-
-# ── VPA Controller ────────────────────────────────────────────
-resource "helm_release" "vpa" {
-  name             = "vpa"
-  repository       = "https://charts.fairwinds.com/stable"
-  chart            = "vpa"
-  namespace        = "kube-system"
-  version          = "3.0.2"
-  create_namespace = false
-
-  set {
-    name  = "admissionController.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "updater.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "recommender.enabled"
-    value = "true"
-  }
-
-  depends_on = [aws_eks_addon.coredns, aws_eks_addon.ebs_csi]
-}

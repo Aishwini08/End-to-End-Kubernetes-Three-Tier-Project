@@ -47,6 +47,8 @@ module "addons" {
   source            = "./modules/addons"
   cluster_name      = module.eks.cluster_name
   oidc_provider_arn = module.eks.oidc_provider_arn
+
+  depends_on = [module.eks, null_resource.update_kubeconfig]
 }
 
 # ── ECR + IAM for Jenkins ─────────────────────────────────────
@@ -81,7 +83,11 @@ resource "null_resource" "apply_storageclass" {
   depends_on = [null_resource.update_kubeconfig]
 
   provisioner "local-exec" {
-    command = "kubectl apply -f ${path.module}/../helm-charts/storageclass.yaml && kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+    command = <<-EOT
+      aws eks update-kubeconfig --region ${var.region} --name three-tier-cluster
+      kubectl apply -f ${path.module}/../helm-charts/storageclass.yaml --validate=false
+      kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml --validate=false
+    EOT
   }
 }
 
@@ -112,6 +118,31 @@ resource "null_resource" "ansible_setup" {
         ${path.module}/../Ansible/jenkins.yml
     EOT
   }
+}
+
+# ── VPA Controller ────────────────────────────────────────────
+resource "helm_release" "vpa" {
+  name             = "vpa"
+  repository       = "https://charts.fairwinds.com/stable"
+  chart            = "vpa"
+  namespace        = "kube-system"
+  version          = "3.0.2"
+  create_namespace = false
+
+  set {
+    name  = "admissionController.enabled"
+    value = "true"
+  }
+  set {
+    name  = "updater.enabled"
+    value = "true"
+  }
+  set {
+    name  = "recommender.enabled"
+    value = "true"
+  }
+
+  depends_on = [module.addons]
 }
 
 # ── ArgoCD Install + GitHub Creds ────────────────────────────
