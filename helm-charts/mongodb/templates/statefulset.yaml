@@ -20,7 +20,6 @@ spec:
             - "--replSet"
             - "rs0"
             - "--bind_ip_all"
-            - "--auth"
           ports:
             - containerPort: 27017
           env:
