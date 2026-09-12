@@ -16,8 +16,7 @@ spec:
       containers:
         - name: mongodb
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          command:
-            - mongod
+          args:
             - "--replSet"
             - "rs0"
             - "--bind_ip_all"
