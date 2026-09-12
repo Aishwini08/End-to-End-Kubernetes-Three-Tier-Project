@@ -3,9 +3,9 @@ image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
 <<<<<<< HEAD
-  tag: "3"
+  tag: "4"
 =======
-  tag: "1"
+  tag: "4"
 >>>>>>> e42e21d (feat: add cluster autoscaler with IRSA, fix provider auth to use exec-based tokens)
 imagePullSecrets: []
 nameOverride: ""
@@ -83,9 +83,9 @@ replicaCount: 1
 image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
-  tag: "3"
+  tag: "4"
 
-  tag: "1"
+  tag: "4"
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
