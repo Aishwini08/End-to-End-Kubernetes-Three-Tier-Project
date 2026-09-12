@@ -21,6 +21,10 @@ module "eks" {
       max_size       = 3
       desired_size   = 2
 
+      node_repair_config = {
+        enabled = true
+      }
+
       iam_role_additional_policies = {
         ecr_read = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
       }
