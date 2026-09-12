@@ -18,7 +18,7 @@ module "eks" {
     worker-nodes = {
       instance_types = ["t3.large"]
       min_size       = 1
-      max_size       = 4
+      max_size       = 15
       desired_size   = 2
 
       node_repair_config = {
