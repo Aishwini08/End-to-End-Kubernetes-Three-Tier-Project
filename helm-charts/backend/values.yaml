@@ -75,7 +75,6 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
-=======
 replicaCount: 1
 image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
