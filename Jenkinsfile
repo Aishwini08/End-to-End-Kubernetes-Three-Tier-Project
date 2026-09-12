@@ -8,36 +8,37 @@ pipeline {
 
     stages {
 
+        // --------------------------------------------------
+        // 1. Checkout source code
+        // --------------------------------------------------
         stage('Checkout') {
             steps {
-                git branch: 'main', credentialsId: 'github-credentials', url: "${GITHUB_REPO}"
+                git branch: 'main',
+                    credentialsId: 'github-credentials',
+                    url: "${GITHUB_REPO}"
             }
         }
 
+        // --------------------------------------------------
+        // 2. Skip Jenkins-generated commits
+        // --------------------------------------------------
         stage('Skip CI Check') {
             steps {
-                script {
-                    def commitMsg    = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
-                    def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
-
-                    if (commitMsg.contains('[skip ci]') ||
-                        commitMsg.contains('[ci skip]') ||
-                        commitAuthor == 'Jenkins CI') {
-                        currentBuild.result = 'NOT_BUILT'
-                        currentBuild.displayName = "#${BUILD_NUMBER} [SKIPPED]"
-                        echo 'Skipping CI - commit was made by Jenkins automation'
-                        return
-                    }
-                    env.SHOULD_RUN = 'true'
-                }
+                scmSkip(
+                    deleteBuild: true,
+                    skipPattern: '.*\\[(ci skip|skip ci)\\].*'
+                )
             }
         }
 
+        // --------------------------------------------------
+        // 3. OWASP Dependency Check
+        // --------------------------------------------------
         stage('OWASP Dependency Check') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
                     mkdir -p reports
+
                     dependency-check \
                         --project "three-tier-app" \
                         --scan Application-Code/ \
@@ -48,6 +49,7 @@ pipeline {
                         || true
                 '''
             }
+
             post {
                 always {
                     publishHTML([
@@ -62,13 +64,20 @@ pipeline {
             }
         }
 
+        // --------------------------------------------------
+        // 4. SonarQube Analysis
+        // --------------------------------------------------
         stage('SonarQube Analysis') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
-                
-                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                withCredentials([
+                    string(
+                        credentialsId: 'sonarqube-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
                     sh '''
                         JENKINS_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+
                         docker run --rm \
                             --network host \
                             -e SONAR_HOST_URL="http://${JENKINS_IP}:9000" \
@@ -83,109 +92,195 @@ pipeline {
             }
         }
 
+        // --------------------------------------------------
+        // 5. Get AWS Account ID
+        // --------------------------------------------------
         stage('Get AWS Account ID') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 script {
-                    env.AWS_ACCOUNT_ID   = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
-                    env.ECR_FRONTEND_URL = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend"
-                    env.ECR_BACKEND_URL  = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend"
+
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: 'aws sts get-caller-identity --query Account --output text',
+                        returnStdout: true
+                    ).trim()
+
+                    env.ECR_FRONTEND_URL =
+                        "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend"
+
+                    env.ECR_BACKEND_URL =
+                        "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend"
+
+                    echo "AWS Account ID: ${env.AWS_ACCOUNT_ID}"
                     echo "ECR Frontend: ${env.ECR_FRONTEND_URL}"
                     echo "ECR Backend:  ${env.ECR_BACKEND_URL}"
                 }
             }
         }
 
+        // --------------------------------------------------
+        // 6. Login to AWS ECR
+        // --------------------------------------------------
         stage('ECR Login') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
-            
                 sh '''
                     aws ecr get-login-password --region ${AWS_REGION} \
-                        | docker login --username AWS --password-stdin \
+                        | docker login \
+                        --username AWS \
+                        --password-stdin \
                         ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
                 '''
             }
         }
 
+        // --------------------------------------------------
+        // 7. Build & Push Frontend
+        // --------------------------------------------------
         stage('Build & Push Frontend') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
                     docker system prune -af || true
-                    docker build -t ${ECR_FRONTEND_URL}:${BUILD_NUMBER} Application-Code/frontend/
-                    docker push ${ECR_FRONTEND_URL}:${BUILD_NUMBER}
+
+                    docker build \
+                        -t ${ECR_FRONTEND_URL}:${BUILD_NUMBER} \
+                        Application-Code/frontend/
+
+                    docker push \
+                        ${ECR_FRONTEND_URL}:${BUILD_NUMBER}
                 '''
             }
         }
 
+        // --------------------------------------------------
+        // 8. Build & Push Backend
+        // --------------------------------------------------
         stage('Build & Push Backend') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
-               
                 sh '''
                     docker system prune -af || true
-                    docker build -t ${ECR_BACKEND_URL}:${BUILD_NUMBER} Application-Code/backend/
-                    docker push ${ECR_BACKEND_URL}:${BUILD_NUMBER}
+
+                    docker build \
+                        -t ${ECR_BACKEND_URL}:${BUILD_NUMBER} \
+                        Application-Code/backend/
+
+                    docker push \
+                        ${ECR_BACKEND_URL}:${BUILD_NUMBER}
                 '''
             }
         }
 
+        // --------------------------------------------------
+        // 9. Trivy Security Scan
+        // --------------------------------------------------
         stage('Trivy Image Scan') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
                 sh '''
-                    trivy image --severity HIGH,CRITICAL --no-progress ${ECR_FRONTEND_URL}:${BUILD_NUMBER} || true
-                    trivy image --severity HIGH,CRITICAL --no-progress ${ECR_BACKEND_URL}:${BUILD_NUMBER} || true
+                    echo "Scanning frontend image..."
+
+                    trivy image \
+                        --severity HIGH,CRITICAL \
+                        --no-progress \
+                        ${ECR_FRONTEND_URL}:${BUILD_NUMBER} \
+                        || true
+
+                    echo "Scanning backend image..."
+
+                    trivy image \
+                        --severity HIGH,CRITICAL \
+                        --no-progress \
+                        ${ECR_BACKEND_URL}:${BUILD_NUMBER} \
+                        || true
                 '''
             }
         }
 
+        // --------------------------------------------------
+        // 10. Update Helm Chart Image Tags
+        // --------------------------------------------------
         stage('Update Helm Chart Tags') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
-               
                 sh """
-                    sed -i "s|repository:.*|repository: ${env.ECR_FRONTEND_URL}|g" helm-charts/frontend/values.yaml
-                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g"                 helm-charts/frontend/values.yaml
+                    echo "Updating frontend Helm values..."
 
-                    sed -i "s|repository:.*|repository: ${env.ECR_BACKEND_URL}|g"  helm-charts/backend/values.yaml
-                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g"                 helm-charts/backend/values.yaml
+                    sed -i "s|repository:.*|repository: ${env.ECR_FRONTEND_URL}|g" \
+                        helm-charts/frontend/values.yaml
+
+                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g" \
+                        helm-charts/frontend/values.yaml
+
+
+                    echo "Updating backend Helm values..."
+
+                    sed -i "s|repository:.*|repository: ${env.ECR_BACKEND_URL}|g" \
+                        helm-charts/backend/values.yaml
+
+                    sed -i "s|tag:.*|tag: \\"${BUILD_NUMBER}\\"|g" \
+                        helm-charts/backend/values.yaml
                 """
             }
         }
 
+        // --------------------------------------------------
+        // 11. Push Updated Helm Charts
+        // --------------------------------------------------
         stage('Push Updated Helm Charts') {
-            when { expression { env.SHOULD_RUN == 'true' } }
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_PASS'
+                    )
+                ]) {
+
                     sh '''
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins CI"
 
-                        git add helm-charts/frontend/values.yaml helm-charts/backend/values.yaml
-                        git diff --staged --quiet || git commit -m "CI: update image tags to ${BUILD_NUMBER} [skip ci] [ci skip]"
+                        git add \
+                            helm-charts/frontend/values.yaml \
+                            helm-charts/backend/values.yaml
 
-                        git fetch https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git main
+                        if git diff --staged --quiet; then
+                            echo "No Helm changes to commit."
+                        else
+                            git commit \
+                                -m "CI: update image tags to ${BUILD_NUMBER} [ci skip]"
+                        fi
+
+                        git fetch \
+                            https://${GIT_USER}:${GIT_PASS}@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git \
+                            main
+
                         git rebase FETCH_HEAD
 
-                        git push https://$GIT_USER:$GIT_PASS@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git HEAD:main
+                        git push \
+                            https://${GIT_USER}:${GIT_PASS}@github.com/Aishwini08/End-to-End-Kubernetes-Three-Tier-Project.git \
+                            HEAD:main
                     '''
                 }
             }
         }
-
     }
 
+    // --------------------------------------------------
+    // Pipeline Result
+    // --------------------------------------------------
     post {
+
         success {
             echo 'Pipeline completed successfully!'
         }
+
         failure {
             echo 'Pipeline failed!'
         }
+
         aborted {
-            echo 'Pipeline skipped - triggered by Jenkins CI commit.'
+            echo 'Pipeline was aborted.'
+        }
+
+        always {
+            echo "Build #${BUILD_NUMBER} finished."
         }
     }
 }
