@@ -18,7 +18,7 @@ module "eks" {
     worker-nodes = {
       instance_types = ["t3.large"]
       min_size       = 1
-      max_size       = 3
+      max_size       = 4
       desired_size   = 2
 
       node_repair_config = {
@@ -28,6 +28,10 @@ module "eks" {
       iam_role_additional_policies = {
         ecr_read = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
       }
+
+      autoscaling_group_tags = {
+        "k8s.io/cluster-autoscaler/enabled"             = "true"
+        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+      }
     }
   }
-}

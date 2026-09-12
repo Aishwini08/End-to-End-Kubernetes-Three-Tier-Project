@@ -13,7 +13,7 @@ resource "helm_release" "prometheus" {
   }
 
   set {
-    name  = "prometheus.prometheusSpec.service.type"
+    name  = "prometheus.service.type"
     value = "ClusterIP"
   }
 

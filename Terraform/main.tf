@@ -172,3 +172,12 @@ module "monitoring" {
 
   depends_on = [module.eks, module.addons, null_resource.update_kubeconfig]
 }
+
+module "cluster_autoscaler" {
+  source            = "./modules/cluster_autoscaler"
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  region            = var.region
+
+  depends_on = [module.eks, module.addons]
+}

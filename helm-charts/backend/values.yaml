@@ -2,7 +2,11 @@ replicaCount: 1
 image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
+<<<<<<< HEAD
   tag: "3"
+=======
+  tag: "1"
+>>>>>>> e42e21d (feat: add cluster autoscaler with IRSA, fix provider auth to use exec-based tokens)
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -67,8 +71,8 @@ readinessProbe:
   periodSeconds: 10
 autoscaling:
   enabled: true
-  minReplicas: 20
-  maxReplicas: 30
+  minReplicas: 1
+  maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 volumes: []
 volumeMounts: []
@@ -80,6 +84,8 @@ image:
   repository: 016257615315.dkr.ecr.ap-south-1.amazonaws.com/backend
   pullPolicy: Always
   tag: "3"
+
+  tag: "1"
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
