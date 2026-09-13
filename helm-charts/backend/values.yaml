@@ -67,8 +67,8 @@ readinessProbe:
   periodSeconds: 10
 autoscaling:
   enabled: true
-  minReplicas: 50
-  maxReplicas: 70
+  minReplicas: 1
+  maxReplicas: 5
   targetCPUUtilizationPercentage: 80
 volumes: []
 volumeMounts: []
