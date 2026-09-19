@@ -13,7 +13,7 @@ body {
     align-items: center;
     min-height: 100vh;
     padding: 20px;
-    background: linear-gradient(135deg, hsl(109, 92%, 67%), #efefef);
+    background: linear-gradient(135deg, hsl(5, 92%, 67%), #efefef);
 }
 
 /* Optional: Add some more global styles for typography */
