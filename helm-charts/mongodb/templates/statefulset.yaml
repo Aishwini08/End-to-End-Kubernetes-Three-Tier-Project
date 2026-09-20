@@ -7,66 +7,120 @@ type: Opaque
 stringData:
   keyfile: |
     s3cr3tMongoKeyFileForReplicaSet1234567890abcdef
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: mongodb
+  namespace: three-tier
 spec:
   serviceName: mongodb-headless
   replicas: {{ .Values.replicaCount }}
+
   selector:
     matchLabels:
       app: mongodb
+
   template:
     metadata:
       labels:
         app: mongodb
+
     spec:
+
+      # Keep MongoDB replicas on different worker nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: mongodb
+              topologyKey: kubernetes.io/hostname
+
+      # Spread MongoDB replicas across Availability Zones
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: mongodb
+
+      # Fix MongoDB keyfile permissions
       initContainers:
         - name: fix-keyfile-perms
           image: busybox
-          command: ["sh", "-c", "cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile && chown 999:999 /keyfile/keyfile"]
+          command:
+            - sh
+            - -c
+            - >
+              cp /keyfile-secret/keyfile /keyfile/keyfile &&
+              chmod 400 /keyfile/keyfile &&
+              chown 999:999 /keyfile/keyfile
+
           volumeMounts:
             - name: keyfile-secret
               mountPath: /keyfile-secret
+
             - name: keyfile
               mountPath: /keyfile
+
+      # MongoDB container
       containers:
         - name: mongodb
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
           args:
             - "--replSet"
             - "rs0"
             - "--bind_ip_all"
             - "--keyFile"
             - "/keyfile/keyfile"
+
           ports:
-            - containerPort: 27017
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               value: {{ .Values.auth.rootUser | quote }}
+
             - name: MONGO_INITDB_ROOT_PASSWORD
               value: {{ .Values.auth.rootPassword | quote }}
+
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+
           volumeMounts:
             - name: data
               mountPath: /data/db
+
             - name: keyfile
               mountPath: /keyfile
+
+      # Volumes
       volumes:
         - name: keyfile-secret
           secret:
             secretName: mongodb-keyfile
+
         - name: keyfile
           emptyDir: {}
+
+  # Persistent storage for each MongoDB replica
   volumeClaimTemplates:
     - metadata:
         name: data
+
       spec:
-        accessModes: [ "ReadWriteOnce" ]
+        accessModes:
+          - ReadWriteOnce
+
         storageClassName: {{ .Values.persistence.storageClass }}
+
         resources:
           requests:
             storage: {{ .Values.persistence.size }}

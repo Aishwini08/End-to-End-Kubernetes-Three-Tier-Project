@@ -6,26 +6,69 @@ metadata:
 spec:
   serviceName: mongodb-arbiter
   replicas: 1
+
   selector:
     matchLabels:
       app: mongodb-arbiter
+
   template:
     metadata:
       labels:
         app: mongodb-arbiter
+
     spec:
+
+      # Keep arbiter on a different worker node
+      # from the MongoDB data replicas
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - mongodb
+              topologyKey: kubernetes.io/hostname
+
+      # Try to keep the arbiter in a different AZ
+      # from the MongoDB data replicas
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - mongodb
+                  - mongodb-arbiter
+
+      # Fix MongoDB keyfile permissions
       initContainers:
         - name: fix-keyfile-perms
           image: busybox
-          command: ["sh", "-c", "cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile && chown 999:999 /keyfile/keyfile"]
+          command:
+            - sh
+            - -c
+            - >
+              cp /keyfile-secret/keyfile /keyfile/keyfile &&
+              chmod 400 /keyfile/keyfile &&
+              chown 999:999 /keyfile/keyfile
+
           volumeMounts:
             - name: keyfile-secret
               mountPath: /keyfile-secret
+
             - name: keyfile
               mountPath: /keyfile
+
+      # MongoDB arbiter
       containers:
         - name: mongodb-arbiter
           image: mongo:6.0
+
           args:
             - "--replSet"
             - "rs0"
@@ -34,8 +77,12 @@ spec:
             - "27017"
             - "--keyFile"
             - "/keyfile/keyfile"
+
           ports:
-            - containerPort: 27017
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+
           resources:
             requests:
               cpu: 50m
@@ -43,15 +90,19 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+
           volumeMounts:
             - name: keyfile
               mountPath: /keyfile
+
       volumes:
         - name: keyfile-secret
           secret:
             secretName: mongodb-keyfile
+
         - name: keyfile
           emptyDir: {}
+
 ---
 apiVersion: v1
 kind: Service
@@ -60,7 +111,11 @@ metadata:
   namespace: three-tier
 spec:
   clusterIP: None
+
   selector:
     app: mongodb-arbiter
+
   ports:
-    - port: 27017
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
